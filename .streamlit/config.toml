@@ -1,0 +1,7 @@
+# Dark from the first frame, so there is no white flash before the galaxy appears.
+[theme]
+base = "dark"
+backgroundColor = "#000003"
+
+[client]
+toolbarMode = "minimal"
