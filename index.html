@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Galaxies in 3D that move in time with Bach's Prelude in C major.">
+<meta name="description" content="Galaxies in 3D that move with the music: calm for Bach's Prelude in C major, a storm for Vivaldi's Summer.">
 <style>
   body { margin: 0; }
   img { max-width: 100%; }
@@ -173,19 +173,27 @@
   .chip:hover { color: var(--ink); }
   .chip[aria-pressed="true"] { color: var(--gilt); border-color: var(--gilt); background: var(--gilt-wash); }
 
-  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .music { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .btn {
     font: 500 11px/1 var(--mono);
     letter-spacing: 0.08em; text-transform: uppercase;
     color: var(--ink);
     border: 1px solid var(--faint);
     background: rgba(0, 0, 3, 0.45);
-    padding: 11px 12px;
+    padding: 11px 11px;
     border-radius: 2px;
     cursor: pointer;
-    transition: color 0.2s, border-color 0.2s;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
   }
   .btn:hover { color: var(--gilt); border-color: var(--gilt); }
+  .btn[aria-pressed="true"], .btn.on { color: var(--gilt); border-color: var(--gilt); background: var(--gilt-wash); }
+  .btn .more { display: none; }
+  .btn.icon { margin-left: auto; width: 35px; height: 35px; padding: 0; display: grid; place-items: center; }
+  .btn.icon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+  @media (min-width: 620px) {
+    .btn .more { display: inline; }
+    .btn .less { display: none; }
+  }
   .sr {
     position: absolute; width: 1px; height: 1px;
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
@@ -266,14 +274,15 @@
       </div>
     </div>
 
-    <div class="actions">
-      <input class="sr" type="file" id="file-input" accept="audio/*">
-      <label class="btn" for="file-input">Play your own recording</label>
-      <button class="btn" id="back-bach" type="button" hidden>Back to the Bach prelude</button>
-      <button class="btn" id="fs" type="button">Full screen</button>
+    <div class="music" role="group" aria-label="Music">
+      <button class="btn" type="button" data-piece="bach" aria-pressed="true" aria-label="Bach, Prelude in C major">Bach<span class="more"> · Prelude</span></button>
+      <button class="btn" type="button" data-piece="summer" aria-pressed="false" aria-label="Vivaldi, Summer, the storm">Vivaldi<span class="more"> · Summer storm</span></button>
+      <input class="sr" type="file" id="file-input" accept="audio/*" aria-label="Play your own recording">
+      <label class="btn" for="file-input" id="own"><span class="less">Your music</span><span class="more">Your own recording</span></label>
+      <button class="btn icon" id="fs" type="button" aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg></button>
     </div>
 
-    <p class="status" id="status" role="status">Press play. Stars and gas sweep through the spiral arms, faster near the centre, as they do in a real galaxy. The music sets the pace: bass notes surge the spin and lean the disk, and new stars light up along the arms.</p>
+    <p class="status" id="status" role="status">Press play. Stars and gas sweep through the spiral arms, faster near the centre, as in a real galaxy. The music sets the pace: bass notes surge the spin and lean the disk. Bach is calm water; Vivaldi’s Summer is a storm.</p>
   </div>
 </div>
 
@@ -328,6 +337,7 @@
      Status line
   ------------------------------------------------------------------ */
   const statusEl = $('status');
+  const LOADING = 'Loading the recording…';
   const HINT = 'Drag to orbit. Pinch or scroll to zoom. The controls fade while the music plays; tap to bring them back.';
   let statusTimer = 0;
   function say(text, thenText, ms) {
@@ -1165,8 +1175,13 @@
     vertexShader: VOL_VERT, fragmentShader: VOL_FRAG
   }, plain));
   // Point the gas-and-dust pass at one galaxy (or, with no slot, at the supercluster's bare glow).
+  // Lightning in the core is scaled to the bulge it lights: a flash that suits a small bulge would white out the
+  // Sombrero's enormous one.
+  const flareOf = p => p.flare || (p.flare = 1/(1 + 0.45*Math.max(0, p.b1[0]*p.b1[0]*p.b1[2]/(0.085*0.085*2.4) - 1)));
+  let coreA = 0, coreF = 0;
   function setVol(p, camv, camW, sky, slot, first) {
     const u = volMat.uniforms;
+    u.uCore.value = coreA + coreF*flareOf(p);
     u.uCam.value.copy(camv); u.uCamWorld.value = camW; u.uSkyRot.value = sky;
     u.uSkyK.value = first ? GAIN/SKY_ENC : 0;                  // the sky glow is laid down once, behind everything
     u.uK.value.fromArray(p.k); u.uOldR.value = p.oldR; u.uDustK.value = p.dustK; u.uDustH.value = p.dustH;
@@ -1539,7 +1554,20 @@
     sB: { x: 0, v: 0 },                      // the disk's swell
     tx: { x: 0, v: 0 }, tz: { x: 0, v: 0 },  // how far the centre has tipped, about two axes
     ox: 0, oz: 0,                            // the rim follows the centre's tip a little later
-    nod: 0, mood: 0.25, moodT: 0.25, last: 60, flip: 1
+    nod: 0, mood: 0.25, moodT: 0.25, last: 60, flip: 1,
+    // Drama. dr: how hard the piece on the stand is taken (0 for the Bach prelude, 1 for Vivaldi's storm);
+    // storm: how hard it is blowing right now; hush: the held breath of a silence in the music.
+    dr: 0, drT: 0, storm: 0, stormT: 0, hush: 0, hushT: 0,
+    // What a stroke of the whole band does. Everything here starts on the beat.
+    jx: { x: 0, v: 0 }, jz: { x: 0, v: 0 },  // the jolt that throws the disk over, quick enough to land with the sound
+    jrx: 0, jrz: 0,                          // ... reaching the rim a moment after the centre
+    sj: { x: 0, v: 0 },                      // the jump in size that goes with it
+    cz: { x: 0, v: 0 },                      // the camera's lunge
+    gRaw: 0, fl: 0, flS: 0,                  // the lurch in the spin, and the lightning
+    sn: 0,                                   // the side the last stroke threw the disk towards
+    // Weight. The spin rate has inertia, and a spinning disk that has been tipped wobbles round instead of springing back.
+    om: 0.02, gy: 0,
+    n: 0, flN: -999                          // ticks so far, and the tick of the last flash
   };
   const HZ = 120, hStep = 1/HZ;
   let hAcc = 0;
@@ -1547,21 +1575,36 @@
   const dB = Math.exp(-hStep*2.6), dM = Math.exp(-hStep*4), dHi = Math.exp(-hStep*7), dA = Math.exp(-hStep/1.4);
   const dE = Math.exp(-hStep/0.45), dBR = Math.exp(-hStep/0.8);
   const aE = 1 - Math.exp(-hStep/0.12), aB = 1 - Math.exp(-hStep/0.16), aO = 1 - Math.exp(-hStep/0.7);
+  const dG = Math.exp(-hStep/0.6), dFl = Math.exp(-hStep/0.3), aFl = 1 - Math.exp(-hStep/0.045);
+  const WJ = TAU*1.0, ZJ = 0.5, aJ = 1 - Math.exp(-hStep/0.045), WS = TAU*1.2, ZS = 0.55, WC = TAU*1.1, ZC = 0.6;
   function spring(s, w, z) { s.v += (-w*w*s.x - 2*z*w*s.v)*hStep; s.x += s.v*hStep; }
   function tick() {
+    M.n++;
     M.bass *= dB; M.mid *= dM; M.high *= dHi; M.act *= dA; M.eRaw *= dE; M.bRaw *= dBR;
     M.eS += (M.eRaw - M.eS)*aE; M.bS += (M.bRaw - M.bS)*aB;
-    spring(M.sB, WB, ZB); spring(M.tx, WT, ZT); spring(M.tz, WT, ZT);
-    M.ox += (M.tx.x - M.ox)*aO; M.oz += (M.tz.x - M.oz)*aO;
+    M.gRaw *= dG; M.fl *= dFl; M.flS += (M.fl - M.flS)*aFl;
+    // The heavy swing. In a storm the disk is tipped harder, is damped far less, so it carries its swing on
+    // from one stroke to the next, and the rim keeps closer behind the centre. A silence stills it.
+    const wt = WT*(1 + 0.6*M.dr), zt = ZT - M.dr*(0.36 - 0.5*M.hush), ao = M.dr > 0.001 ? 1 - Math.exp(-hStep/(0.7 - 0.3*M.dr)) : aO;
+    // A spinning disk that has been tipped does not simply spring back: it wobbles round, the way a spun plate
+    // does. The faster it spins, the more it does so. (This turns the swing's velocity; it adds no energy.)
+    const g = M.gy*hStep;
+    if (g > 1e-7) { const c = Math.cos(g), s = Math.sin(g), vx = M.tx.v, vz = M.tz.v; M.tx.v = c*vx - s*vz; M.tz.v = c*vz + s*vx; }
+    spring(M.sB, WB, ZB); spring(M.tx, wt, zt); spring(M.tz, wt, zt);
+    spring(M.jx, WJ, ZJ); spring(M.jz, WJ, ZJ); spring(M.sj, WS, ZS); spring(M.cz, WC, ZC);
+    M.ox += (M.tx.x - M.ox)*ao; M.oz += (M.tz.x - M.oz)*ao;
+    M.jrx += (M.jx.x - M.jrx)*aJ; M.jrz += (M.jz.x - M.jrz)*aJ;
   }
   // voice 0 = bass, 1 = middle, 2 = treble; dir is the melodic direction for treble notes
   function hit(voice, v, dir) {
     const c = Math.cos(M.nod), s = Math.sin(M.nod);
     if (voice === 0) {
       // a bass note leans the disk over, each time towards a new side, and swells it
+      // (in a storm the bass comes thick and fast, so each note counts for less and the big strokes do the leaning)
+      const q = 1 - 0.5*M.dr;
       M.nod += 1.1;
-      M.tx.v += 0.7*v*Math.cos(M.nod); M.tz.v += 0.7*v*Math.sin(M.nod);
-      M.bass = Math.min(1.5, M.bass + 1.5*v); M.sB.v += 8.4*v; M.bRaw = Math.min(1.6, M.bRaw + v); M.eRaw += 0.4*v;
+      M.tx.v += 0.7*q*v*Math.cos(M.nod); M.tz.v += 0.7*q*v*Math.sin(M.nod);
+      M.bass = Math.min(1.5, M.bass + 1.5*v); M.sB.v += 8.4*q*v; M.bRaw = Math.min(1.6, M.bRaw + q*v); M.eRaw += 0.4*v;
     } else if (voice === 1) {
       M.tx.v -= 0.15*v*c; M.tz.v -= 0.15*v*s;
       M.mid = Math.min(1.3, M.mid + 0.9*v); M.sB.v -= 2.5*v; M.eRaw += 0.5*v;
@@ -1571,6 +1614,77 @@
       M.high = Math.min(1.3, M.high + 0.7*v); M.eRaw += 0.4*v;
     }
     M.eRaw = Math.min(M.eRaw, 2);
+  }
+  // A stroke of the whole band, the storm's thunder. Everything about it starts on the beat: the disk is jolted
+  // over, jumps in size, lurches round and flashes, and the camera lunges in. The jolt is over in a moment; what
+  // it leaves behind is the heavy swing. The biggest strokes tower over the ordinary ones, and they throw the
+  // disk's face towards the camera (dx, dz), so that it opens up as the lightning goes through it.
+  // Calm pieces (dr = 0) never get one.
+  function strike(v, dx, dz) {
+    const D = M.dr;
+    if (D < 0.02) return;
+    const w = Math.pow(v, 1.5);
+    M.sn += 2.4;
+    let cx = Math.cos(M.sn), cz = Math.sin(M.sn);
+    if (w > 1.3 && dx !== undefined) { cx = dx; cz = dz; M.sn = Math.atan2(dz, dx); }
+    M.jx.v += JOLT*D*w*cx; M.jz.v += JOLT*D*w*cz;
+    M.tx.v += SWING*D*w*cx; M.tz.v += SWING*D*w*cz;
+    M.sj.v += 0.3*D*w; M.sB.v += 4*D*w;
+    M.gRaw = Math.min(2.6, M.gRaw + 0.8*w);
+    if (M.n - M.flN >= HZ/2) { M.flN = M.n; M.fl = Math.min(1.6, M.fl + 0.7*w); }   // never more than two flashes a second
+    M.cz.v += 3*w;
+  }
+  const JOLT = 1.5, SWING = 1.0;
+  // Where the music is known ahead of time, a big stroke is seen coming: a moment before it the disk gathers
+  // itself, drawing in a little and leaning away from where it is about to be thrown.
+  function windup(v, dx, dz) {
+    const D = M.dr;
+    if (D < 0.02) return;
+    const w = Math.pow(v, 1.5), a = M.sn + 2.4;
+    let cx = Math.cos(a), cz = Math.sin(a);
+    if (w > 1.3 && dx !== undefined) { cx = dx; cz = dz; }
+    M.tx.v -= 0.3*SWING*D*w*cx; M.tz.v -= 0.3*SWING*D*w*cz;
+    M.sB.v -= 3*D*w;
+  }
+  // Once a frame: ease the slow quantities towards where the music has put them.
+  function settle(dt) {
+    const to = (x, y, tau) => x + (y - x)*(1 - Math.exp(-dt/tau));
+    M.level = to(M.level, M.levelT, 0.5);
+    M.slow = to(M.slow, M.level, 4);
+    M.mood = to(M.mood, M.moodT, 1.2);
+    M.dr = to(M.dr, M.drT, M.drT > M.dr ? 0.4 : 1.2);
+    M.storm = to(M.storm, M.stormT, M.stormT > M.storm ? 0.12 : 0.6);     // a storm breaks at once and blows itself out more slowly
+    M.hush = to(M.hush, M.hushT, M.hushT > M.hush ? 0.1 : 0.2);
+  }
+  // Once a frame: turn the music's state into the galaxy's pose. k scales everything down for reduced motion.
+  const soft = x => 0.5*Math.tanh(2*x);      // a lean eases towards its limit, like everything else here
+  const POSE = { om: 0.02, S: 0, F: 0, H: 0, rx: 0, rz: 0, wx: 0, wz: 0, breath: 1, pulse: 0, coreA: 0, coreF: 0, flowV: 0.2, flowA: 0.004, spark: 0.22, push: 0 };
+  function pose(dt, k) {
+    const P = POSE, D = k*M.dr, S = D*M.storm, F = D*M.flS, H = D*M.hush;
+    // Spin. A dramatic piece gives the galaxy the inertia of something massive: a gust spins it up quickly and it
+    // coasts down slowly when the music relents. Only a silence reins it in. A stroke's lurch is immediate.
+    const want = (0.02 + k*(0.09*M.level + (0.22*M.bS + 0.09*M.eS)*(1 - 0.5*M.dr)) + 0.36*S)*(1 - 0.65*H);
+    const tau = M.dr*(want > M.om ? 0.3 : H > 0.3 ? 0.4 : 2.6);
+    M.om = tau > 0.01 ? M.om + (want - M.om)*(1 - Math.exp(-dt/tau)) : want;
+    P.om = M.om + 0.3*D*M.gRaw;
+    M.gy = M.dr*(1.6 + 3.2*P.om);
+    P.S = S; P.F = F; P.H = H;
+    // Lean: the heavy swing plus the jolt. The rim carries the galaxy's frame; the centre leans ahead of it,
+    // bending the disk softly, and the bend eases to a limit instead of stopping dead.
+    P.rx = soft(k*(M.ox + M.jrx)); P.rz = soft(k*(M.oz + M.jrz));
+    let wx = soft(k*(M.tx.x + M.jx.x)) - P.rx, wz = soft(k*(M.tz.x + M.jz.x)) - P.rz;
+    const wl = Math.hypot(wx, wz);
+    if (wl > 1e-5) { const q = 0.24*Math.tanh(wl/0.24)/wl; wx *= q; wz *= q; }
+    P.wx = wx; P.wz = wz;
+    P.breath = 1 + 0.06*Math.tanh((k*(0.008*M.bS + 0.014*M.sB.x*(1 + 0.5*M.dr)) + D*M.sj.x)/0.06);
+    P.pulse = k*clamp(0.6*M.bS + 0.3*M.eS, 0, 1)*(1 - 0.3*M.dr) + 0.7*F;       // bursts of new stars with the notes
+    P.coreA = 1.3*M.bS*(1 - 0.45*M.dr) + 0.4*D*M.bass;                         // in a storm the core beats with the bass line
+    P.coreF = 1.1*F;                                                           // and lightning runs through it at each stroke
+    P.flowV = 0.2 + k*(0.8*M.level + 0.4*M.bS) + 1.0*S;
+    P.flowA = 0.004 + k*(0.006*M.level + 0.008*M.bS) + 0.014*S + 0.005*D*M.gRaw;
+    P.spark = 0.22 + 0.9*M.high + 0.3*S;
+    P.push = k*(0.05*M.level + 0.015*M.bS) + 0.04*S + 0.14*D*M.cz.x - 0.05*H;  // how far the camera has moved in
+    return P;
   }
 
   /* ------------------------------------------------------------------
@@ -1662,11 +1776,45 @@
   const REC_T = [0.289,0.599,0.868,1.107,1.367,1.636,1.906,2.195,2.444,2.774,2.993,3.253,3.542,3.771,4.051,4.32,4.58,4.849,5.108,5.338,5.617,5.887,6.156,6.415,6.685,6.974,7.214,7.493,7.742,7.982,8.261,8.56,8.81,9.099,9.359,9.618,9.898,10.167,10.436,10.706,10.955,11.264,11.514,11.783,12.033,12.292,12.581,12.851,13.13,13.399,13.669,13.938,14.218,14.467,14.766,15.036,15.285,15.575,15.824,16.103,16.373,16.612,16.892,17.161,17.45,17.74,17.999,18.259,18.548,18.797,19.067,19.326,19.585,19.875,20.134,20.394,20.683,20.932,21.192,21.451,21.701,21.99,22.269,22.499,22.788,23.058,23.307,23.566,23.836,24.155,24.395,24.644,24.933,25.193,25.462,25.732,25.971,26.25,26.54,26.809,27.078,27.358,27.627,27.897,28.146,28.435,28.695,28.964,29.224,29.473,29.742,30.012,30.271,30.561,30.83,31.069,31.359,31.638,31.887,32.147,32.396,32.716,32.965,33.215,33.484,33.743,34.033,34.292,34.541,34.831,35.1,35.34,35.629,35.898,36.158,36.447,36.707,37.006,37.265,37.495,37.784,38.044,38.313,38.602,38.892,39.151,39.42,39.68,39.949,40.219,40.488,40.757,41.027,41.306,41.566,41.815,42.094,42.344,42.613,42.913,43.182,43.481,43.721,43.98,44.269,44.529,44.778,45.048,45.297,45.616,45.856,46.105,46.404,46.654,46.933,47.223,47.492,47.801,48.071,48.32,48.62,48.899,49.158,49.438,49.697,49.986,50.256,50.495,50.775,51.034,51.303,51.573,51.842,52.132,52.411,52.68,52.95,53.239,53.498,53.758,54.027,54.317,54.596,54.855,55.125,55.374,55.654,55.973,56.222,56.522,56.781,57.04,57.34,57.599,57.858,58.168,58.407,58.677,58.966,59.225,59.515,59.754,60.034,60.323,60.602,60.862,61.141,61.41,61.69,61.959,62.229,62.498,62.797,63.057,63.346,63.575,63.875,64.104,64.394,64.673,64.982,65.272,65.531,65.79,66.05,66.329,66.599,66.878,67.187,67.487,67.706,67.975,68.255,68.494,68.774,69.053,69.332,69.612,69.871,70.121,70.4,70.679,70.969,71.238,71.517,71.807,72.046,72.296,72.575,72.854,73.134,73.423,73.732,74.052,74.311,74.561,74.85,75.179,75.429,75.688,75.977,76.277,76.566,76.805,77.085,77.384,77.644,77.923,78.202,78.492,78.771,79.02,79.29,79.569,79.838,80.118,80.417,80.697,80.936,81.205,81.485,81.764,82.043,82.313,82.582,82.882,83.161,83.41,83.71,83.999,84.249,84.508,84.777,85.047,85.326,85.576,85.855,86.134,86.414,86.673,86.952,87.242,87.521,87.76,88.07,88.329,88.599,88.878,89.157,89.447,89.706,89.946,90.245,90.504,90.774,91.053,91.342,91.652,91.911,92.191,92.44,92.739,93.019,93.288,93.587,93.887,94.126,94.405,94.665,94.944,95.243,95.493,95.842,96.151,96.401,96.66,96.93,97.199,97.478,97.788,98.117,98.466,98.716,98.985,99.264,99.544,99.863,100.202,100.631,101.001,101.29,101.529,101.809,102.078,102.357,102.647,102.936,103.245,103.525,103.744,104.034,104.313,104.572,104.842,105.151,105.391,105.67,105.929,106.209,106.488,106.757,107.027,107.296,107.596,107.865,108.124,108.394,108.683,108.932,109.222,109.501,109.81,110.07,110.329,110.619,110.918,111.177,111.467,111.726,112.005,112.285,112.524,112.824,113.093,113.382,113.652,113.921,114.191,114.49,114.749,115.038,115.318,115.597,115.887,116.146,116.415,116.685,116.954,117.234,117.503,117.772,118.072,118.351,118.64,118.92,119.169,119.459,119.748,120.017,120.297,120.556,120.855,121.125,121.384,121.653,121.903,122.172,122.452,122.711,123.02,123.3,123.559,123.879,124.198,124.447,124.697,124.956,125.255,125.545,125.794,126.083,126.363,126.612,126.882,127.181,127.48,127.76,127.999,128.298,128.588,128.837,129.126,129.426,129.725,130.014,130.264,130.543,130.833,131.072,131.341,131.621,131.91,132.19,132.439,132.718,132.988,133.257,133.566,133.826,134.095,134.395,134.634,134.913,135.193,135.462,135.751,136.061,136.35,136.659,136.909,137.178,137.478,137.737,138.016,138.306,138.585,138.894,139.124,139.393,139.702,139.982,140.281,140.66,141.01,141.289,141.538,141.838,142.137,142.406,142.666,142.935,143.244,143.524,143.783,144.073,144.322,144.591,144.871,145.19,145.559,145.849,146.128,146.427,146.756,147.036,147.305,147.605,147.884,148.183,148.512,148.852,149.191,149.55,149.979,150.229];
   const REC_V = [0.6,0.75,0.65,0.45,0.83,0.9,0.46,0.46,0.61,0.51,0.61,0.41,0.48,0.68,0.41,0.39,0.71,1.0,0.73,0.67,1.0,0.67,0.42,0.75,0.78,0.83,0.62,0.41,0.58,0.54,0.34,0.35,0.74,1.0,0.66,0.66,1.0,0.83,0.48,0.53,0.45,0.73,0.53,0.4,0.69,0.54,0.39,0.32,0.62,0.89,0.68,0.46,0.63,0.68,0.34,0.34,0.49,0.63,0.56,0.37,0.48,0.76,0.39,0.41,0.83,1.0,0.81,0.83,1.0,0.87,0.79,0.71,0.78,0.78,0.74,0.55,0.72,0.46,0.55,0.55,0.76,1.0,0.88,0.73,0.64,0.87,0.6,0.38,0.77,0.67,0.73,0.63,0.43,0.61,0.55,0.33,0.78,0.96,0.73,0.55,1.0,0.83,0.51,0.45,0.61,0.81,0.61,0.42,0.63,0.74,0.42,0.41,0.59,0.67,0.93,0.85,0.57,0.6,0.55,0.32,0.63,0.54,0.79,0.75,0.34,0.72,0.55,0.4,0.67,0.68,0.92,1.0,0.49,0.73,0.65,0.38,0.52,0.44,0.68,0.66,0.3,0.71,0.62,0.36,0.52,0.57,0.96,0.85,0.48,0.95,0.72,0.41,0.62,0.37,0.87,0.62,0.38,0.91,0.68,0.35,0.41,0.45,0.88,0.6,0.59,0.62,0.52,0.38,0.4,0.37,0.68,0.47,0.35,0.63,0.53,0.34,0.56,0.86,0.96,1.0,0.65,1.0,1.0,0.64,0.55,0.72,0.91,0.88,0.47,1.0,0.84,0.58,0.93,0.67,1.0,0.73,0.91,1.0,0.67,0.54,0.65,0.5,0.87,0.59,0.57,0.98,0.51,0.3,0.8,0.39,0.91,0.54,0.64,0.87,0.5,0.38,0.63,0.37,0.77,0.5,0.46,0.9,0.6,0.45,0.54,0.42,0.61,0.85,0.53,0.52,0.73,0.44,0.59,0.3,0.53,0.81,0.38,0.62,0.66,0.41,0.74,0.86,0.66,0.85,0.99,0.68,0.72,0.56,0.72,0.55,0.48,0.57,0.4,0.41,0.59,0.56,0.58,0.66,0.56,0.75,0.74,0.61,0.65,0.57,0.45,0.47,0.43,0.5,0.53,0.51,0.57,0.49,0.56,0.54,0.49,0.69,0.75,0.38,0.54,0.5,0.51,0.39,0.32,0.52,0.49,0.36,0.44,0.42,0.68,0.76,0.54,0.69,1.0,0.52,0.53,0.75,0.67,0.44,0.42,0.6,0.82,0.42,0.48,0.76,0.67,0.63,0.9,1.0,1.0,0.9,1.0,1.0,0.94,0.54,0.76,0.99,1.0,0.7,0.84,0.96,0.77,0.76,0.62,0.84,1.0,0.69,0.61,0.85,0.77,0.68,0.52,0.7,0.88,0.57,0.54,0.69,0.66,0.66,0.64,0.54,1.0,0.54,0.64,0.73,0.84,0.61,0.61,0.52,0.82,0.56,0.44,0.71,0.46,0.73,0.6,0.87,1.0,0.69,0.74,1.0,0.63,0.44,0.46,0.61,0.9,0.46,0.62,0.86,0.5,0.61,0.45,0.69,1.0,0.49,0.53,0.8,0.51,0.51,0.32,0.52,0.78,0.35,0.5,0.78,0.56,0.67,0.49,0.78,1.0,0.5,0.63,0.84,0.53,0.46,0.44,0.55,0.78,0.43,0.6,0.77,0.62,0.35,0.49,0.81,0.77,0.43,0.69,0.62,0.48,0.46,0.39,0.7,0.58,0.44,0.57,0.48,0.61,0.45,0.41,0.55,0.59,0.45,0.51,0.45,0.5,0.3,0.37,0.47,0.41,0.31,0.47,0.41,0.52,0.73,0.59,0.9,1.0,0.66,0.79,0.97,0.57,0.65,0.69,0.71,1.0,0.57,0.76,0.98,0.77,0.86,0.71,0.98,1.0,0.66,0.76,1.0,0.99,0.74,0.56,0.8,0.9,0.52,0.77,0.95,0.79,0.65,0.65,0.87,0.79,0.48,0.73,0.65,0.72,0.49,0.45,0.7,0.49,0.39,0.56,0.63,0.56,0.55,0.39,0.63,0.76,0.46,0.58,0.5,0.51,0.35,0.3,0.51,0.46,0.33,0.43,0.44,0.58,0.5,0.39,0.61,0.7,0.4,0.45,0.47,0.49,0.43,0.38,0.6,0.74,0.39,0.5,0.56,0.66,0.42,0.59,0.55,0.8,0.78,0.68,0.73,0.66,0.63,0.69,0.64,0.79,0.55,0.56,0.45,0.88,0.93,1.0,0.93,0.9,1.0,0.91,0.81,0.93,0.84,1.0,0.57,1.0,0.49,0.96,0.92,0.56];
   const REC_META = 'J. S. Bach · BWV 846 · Kimiko Ishizaka, piano', SYNTH_META = 'J. S. Bach · BWV 846 · synthesised';
-  const REC = { url: 'prelude.mp3', buf: null, state: 'loading', want: false, ev: [], i: 0 };
+
+  /* Vivaldi, The Four Seasons: Summer, third movement (Presto), the storm. John Harrison, violin, with the
+     Wichita State University Chamber Players, conducted by Robert Turizziani; recorded in 2000 and shared
+     under CC BY-SA. There is no score to follow here, so the recording itself was analysed ahead of time:
+     SUM_DT is the gap in milliseconds from each event to the next, SUM_K says what each one is (0 bass,
+     1 middle, 2 treble rising, 3 treble falling, 4 a stroke of the whole band), SUM_V how strong it is,
+     and SUM_E how hard the orchestra is playing, ten times a second. Anything found in the silences was hall noise
+     and has been left out. */
+  const SUM_DT = '1149,18,0,6,371,6,221,220,6,186,133,6,23,279,35,168,192,92,88,180,11,18,174,81,192,243,227,127,18,11,180,180,157,93,46,58,64,134,220,70,197,1254,6,0,12,302,284,192,261,81,6,81,209,23,215,18,197,174,6,110,122,168,186,215,99,185,93,82,0,267,156,6,250,23,12,220,256,5,53,122,81,0,104,76,87,87,12,168,180,6,5,35,221,151,151,81,134,52,127,64,134,46,47,6,278,174,70,145,105,261,6,5,12,157,197,87,111,29,52,284,6,23,232,29,0,151,238,93,203,349,11,6,163,220,192,0,87,128,46,279,17,18,69,105,6,168,0,23,157,11,192,192,5,12,157,6,29,359,0,35,145,24,34,169,40,151,175,23,52,145,64,87,23,169,180,17,209,87,70,156,320,87,93,139,35,290,12,5,76,261,18,34,204,133,52,82,255,6,58,168,285,238,93,63,163,104,169,232,75,279,12,220,134,87,58,122,232,116,76,110,0,23,192,0,81,215,6,5,145,198,46,134,40,0,279,163,139,186,226,93,12,284,29,12,284,105,87,232,226,186,186,35,191,23,111,127,227,75,122,430,156,180,134,186,75,319,24,29,0,238,75,151,0,122,197,58,209,122,12,46,140,0,185,12,17,175,0,52,145,174,221,17,64,99,46,58,157,139,203,41,6,383,17,372,11,0,198,0,186,92,134,151,6,133,180,215,354,290,18,23,186,185,198,23,70,87,244,191,215,58,139,64,285,23,197,6,192,0,0,5,204,0,180,5,180,12,284,41,41,185,29,157,29,110,93,6,168,30,17,168,29,360,0,0,12,220,6,163,360,116,122,5,70,174,0,6,290,53,5,198,52,75,53,122,0,0,151,29,40,198,319,29,29,116,46,6,0,215,116,0,93,203,12,98,157,70,58,41,156,82,0,174,110,0,17,175,52,116,81,93,76,197,0,6,133,157,75,151,12,162,47,145,0,58,122,151,46,18,6,185,0,6,163,64,226,168,6,0,6,255,6,70,261,6,0,35,180,69,111,29,168,6,23,192,5,18,151,0,139,186,6,104,87,0,180,23,256,23,81,174,6,6,209,12,104,64,0,186,87,0,46,209,23,204,17,0,6,168,87,227,197,0,6,0,232,6,139,81,18,156,59,0,197,70,5,76,110,87,12,244,81,168,221,11,175,58,0,139,52,215,12,5,134,87,46,47,104,82,0,63,35,87,70,110,93,93,64,41,81,186,5,12,174,0,70,29,93,151,23,0,0,151,35,5,175,11,6,23,163,64,122,5,0,64,128,99,104,105,98,6,81,128,128,319,389,6,6,203,6,162,0,0,52,180,151,12,64,180,0,46,0,157,23,128,46,209,6,17,24,151,121,76,128,81,0,104,76,46,163,197,6,6,52,168,47,151,98,99,0,6,145,35,6,191,198,5,6,12,186,5,186,186,12,5,163,46,6,12,156,198,11,0,18,151,40,12,122,244,11,93,82,17,0,192,0,185,6,0,6,203,105,87,5,192,6,0,0,186,29,34,140,197,6,6,0,209,191,6,197,6,6,0,180,0,0,203,169,17,0,6,197,18,58,267,75,12,5,82,93,145,40,192,0,6,0,197,12,180,11,41,157,5,35,151,6,12,46,134,5,175,5,47,203,70,110,17,296,58,88,116,180,17,134,69,157,17,151,0,261,331,24,29,168,12,5,192,17,58,122,145,6,6,64,267,162,6,0,360,35,232,6,302,93,168,209,0,180,23,64,116,52,134,75,192,163,17,221,46,145,221,151,63,117,226,0,12,0,220,64,308,81,192,249,23,18,133,41,238,139,145,47,209,162,6,29,215,99,40,134,69,163,23,180,87,105,40,151,18,162,12,128,58,174,58,331,5,0,64,215,6,0,261,81,18,104,204,69,29,0,116,99,6,127,59,272,64,6,116,87,111,34,35,116,180,18,11,186,23,0,0,169,29,174,17,18,168,41,34,146,40,157,17,192,40,59,87,0,81,110,87,18,93,110,81,18,179,6,0,0,198,34,12,151,52,145,29,24,168,6,52,145,12,191,18,104,157,17,12,296,70,6,185,0,12,87,174,58,93,122,46,157,29,70,122,168,41,377,6,6,197,81,134,52,6,261,134,87,75,110,29,238,6,0,134,46,81,111,17,87,116,70,0,296,41,17,238,18,0,5,163,17,157,151,52,6,319,0,12,238,6,6,5,383,6,12,232,23,198,156,6,12,6,185,250,360,174,180,17,64,221,93,17,261,93,58,41,244,29,6,29,296,174,128,168,0,23,157,75,105,0,0,98,291,11,82,116,139,232,186,6,0,174,180,41,0,197,35,197,331,6,377,6,0,116,174,76,98,70,162,6,0,134,220,238,238,198,157,11,12,151,209,5,0,291,58,6,267,151,203,5,169,203,87,93,17,244,99,70,104,139,250,192,133,58,221,46,302,52,0,122,197,70,128,168,52,41,168,140,186,185,12,23,360,6,6,81,273,6,0,23,238,116,6,0,58,220,105,6,0,104,215,52,0,0,168,204,0,5,88,98,209,58,6,267,6,0,23,337,11,76,290,6,81,116,145,308,157,104,64,116,232,29,0,6,192,11,163,0,104,82,93,17,290,203,59,139,11,227,11,238,273,64,23,6,186,104,82,180,168,168,18,29,180,185,47,180,174,29,151,221,5,175,11,58,0,308,0,11,349,29,11,180,192,0,6,0,209,145,17,18,243,128,93,395,0,168,52,151,186,157,197,6,87,105,40,140,127,227,52,11,105,81,343,0,98,302,35,151,221,156,192,29,174,174,18,5,175,209,11,12,313,35,0,18,174,168,6,0,6,197,0,163,5,366,23,12,319,6,46,146,0,226,122,23,174,6,12,23,186,29,348,6,35,168,70,272,227,162,169,46,285,11,105,133,180,186,145,203,23,6,198,191,64,6,203,52,198,116,0,185,6,35,122,0,87,58,29,110,105,174,99,6,156,18,98,0,76,116,6,58,145,29,232,35,12,156,169,0,127,47,6,174,0,6,0,185,6,12,174,17,6,186,0,104,0,134,273,6,23,232,35,6,0,220,41,122,52,203,12,6,0,197,17,221,337,23,220,99,18,226,23,168,41,227,104,70,261,23,23,354,18,220,192,23,296,18,17,250,238,232,58,284,99,180,203,35,192,185,105,191,41,238,209,267,383,261,6,192,58,191,122,227,156,12,0,23,360,0,23,169,93,23,75,0,174,88,87,267,139,52,279,337,104,17,175,156,47,23,215,0,174,17,29,233,348,6,168,203,0,6,174,76,296,423,291,226,314,5,192,435';
+  const SUM_K = '201401001013002031003110000142000130101002140000043101010013000010124201310021013403120124100301301010240010114301021021300240100031100120130142101210030113012031001010203101300310010102410102013021000201010020101031021240031214002014031010203102003001031021001101001340103103031013201130230131021001310013022103101001200010210003013010134001200320101013010312012400310341001203101301240310013031401200312103012124010131034101021201302104302120001343011240310221021013021034102010121301213401301242100134031020121301310010130140131041021340130213012130240120134012124030124030202103003011012403013240131023401303124013202410130124021224103100210241210430310210124133041310320143102021410302140132012431001420202013431310210341021310021020101030101403100210130142001030110020013101021101101010134010101010210010303101020203201301210120214010320121034130100210120130310134013102010210301241210302120143103031010210102021021341010210103010130120310103011340120130120310134012021120341012012024100000130120021013400012401013400312003010013100201240031013400001012002402101010103102101030130013002014002034042103140021400314001240134013011340120201310130101243003121003031100102402000130010001010012413003103401012001001020030131030031031202030301220101201340101431301012120132013410011201001001031003010302010101321014201310210314012013310213012140312003101341120021430101304010101031010130031010100120003100200100100001010030124024030124102020003100120131000101301000101001';
+  const SUM_V = 'jpprfdd6abfb9aaeaedhbede778edd9879969c755ppxp78aenhccaaae7ccd5bjchddhaodad6ale5jfgacee5imnlpba6dd8dabaiid5d7dnpl8e5ad8abc98jjicbbpbedhaeckbchfggccgeibbcffedjed5cdl7ble8fkfabdc9cca8ab5h9dfg7b8cgca8eda7gc9aac89dfcabedd8ebfe9dadffgdfe5gieaggb5ekbacee9ec9chccdfb8fdedehibge9b8cbdcbce6dbbbbcaahd8c9a68bb8caecgd9b8ed99geafad9hbfceabc9797a87fclcba7d9dlaabcof7baec9babcigeo5cb5deb65fd8ef8cf8figpdg85b95gf97fg65gfdi8g5hhfjgpb8dgi7ici5d7npm7mh5hj5ch7omb55ippkp9iipvpab679b5fb5kd5dhahnfpe5haggme9ddbjb6aakkpb775bppb7epdh6phcc5la856hai95pi7dih5rgkdcil6da6aaeaifid9ic7iedmid7hfgihpjpfjidilflfef7d55gbcippzlhccdnojcle7doqjjb69akegdfdapkgbbaakfdbhcfnolj8ghchdadcfgipgdh9bedhgbgbaefpem8bcad6fcbcebjehfg89ageaieaibhgbefdkgcbea8fplip9bcdchd9hcd9hehgh7acedbb9eaedfpijc9b7ccgkebbdflo5ida9adfb9eac9d8bd9cdecd9c9i9cerdpgdedpc8ccbhae9gbffcba6c9fbhealdabdcb8pia8lgaaceejgc9dec95957677c9bokkcjlh5ajhibde6hojc79h9afc7b6jeppp9dekdaiddgj9d89oa5e8bijk8e6jpfd8a586aeebdba5dc5b6ipfnha6bapec8eeeaa5cc85a8jcdpfphdfadahdb5oxjmcjgpdbcbcda9bfbccf9gadkcb8ecjfgabbdcb8ldbgac7bdjcfjbebb9aedb5cec6adb8fffedbcga6adcfegehcnbk99ebh989a7ejc7cjcd99abafd855pgd56mif56lpk5bja5dd5ffhg5eb7d5gde5eb5e5acic589bge5pa5aec5ecgfjfek59ebd5dhffbcajhdlfpehdad7jhfcdbbg7cj8c7deabhedcgb67ab59cdbf8dhfaeceef6fa8cgbacghidbeblcicbc8aaa8bidk86dfc5c66da6cebfma9gb7a9ifd598lahcbjff8ddf8gbbiob5ajmpd8867j8fillpbfhjk9gc5hnddpp5jppte6apppph8cfdicabe8eccbilddhb9bfhg87c87bia8eabidclbbbdhcdg9hgjmmfmae8bklbfeag8cacd9efc9bbd8c585jppgb55958555';
+  const SUM_E = '000000000003mstqqqpqpqqtuvvusooprtuuutttsrpruvwwwwuwwwpe3100000000000004ltvwvvvwwxyyyxvvvrnnpxxywvuvttstyyyxwuuvwvrebswyyxqsttwxxxwwwuwuutxxxwwxwwvwwyyyxvttvvwvxxyxvsuwwwvwwxvsrrrqrqqtvwtrssruuututqmjjijjjlqrspomoossusspomjlmnjgostprrssvwvrsvwvusrtusi7oxyywtntsqa9kstqkmpsrnacqssoouvwre59lnpnpputrb9dntutolqpoghovvtoprspg8fmpprstuurgkquvvtogmmla69aa753466436662116994433110237djqssph94211112239dhgknttvtvtqnjmii985b9mjpiqovuvswvxwxwxxxxxxxvvvurkuvvqyyyvc8777adkpsuusk79eknkf987335657bbadhgcdimqpmec9411235aeicbdone1158kqqpppi32212344558lrsqrsrimjjbhijghd626flh7111101132200122100000018eimtxyyyyyyyyywkhhghkjihimquutuvvsrlldd52000000000019lsttmnlqopivwxsrpnkqsurtstkhgigfbc7prulg9eeomnfqsvuvsmeiigdlppjfelotqmcnstrqmhekkieijjiiistsifswxwsnjjnnnhflmllwxxtrpd68cfkxyxupod669gmxxxomh6334221111111467432234465668ecfcjkstyyyxwsswxxwvuwxxxwwuwwwvxyyyvuvttstsvvuwuvsvrg13aee89bdeglkhboml3200000001247778b997beggda6321102265b9cab763210111111211223332100000014431100001576322111100011111100000146532112321asvvsuvwvvvwyyyyxxxxyyyxyxxtsvxyzzzzyyyxxxxxwvvwwwuuvwxxxwwxyyyyyxwwwxwwspnsuvuuvwwwuvvvtuuvttqplnlqsuuvxxwvwwusxxwnjjkilpprstuyyyyyyyyyysoig79852343269769b32467ab87eiga7537aa9ffa43448cqutk858prqjmsttpljjhmrxxxuvxyyxvqvxyxwvwwvpquwwvutssrssoltttfginknklimopnmllkooutvssnmmopplgikkhimlotutooligihca676dgimqsuwwxwwurlqqoheddinplhecaa965876esuq945irurooomkieafmmh523cfttujhca98abedd9a65101acuwxslb76abggnrqqnoqig07isuvuutstrssrqonpnldddb963321112233332222221148a8aa7222222211111111112347798a9bepuvvwwwwxwwxxyxyyyxxxyyyxxxyyyyyxxxxuj2103jwyzzzyxwxyyzzzyxvqe510000000000000000000000000000000000000000';
+  const SUM_META = 'A. Vivaldi · The Four Seasons · John Harrison, violin · Wichita State University Chamber Players · CC BY-SA 4.0';
+
+  // The pieces on the stand. Each recording is fetched when first chosen. drama says how hard the galaxy takes it.
+  const PIECES = {
+    bach: {
+      title: 'Prelude in C major', meta: REC_META, url: 'prelude.mp3', gain: 1.25, dur: 161.8, drama: 0, bars: true,
+      note: 'Bach’s Prelude in C major: calm water. Bass notes surge the spin and lean the disk, and new stars light up along the arms.',
+      buf: null, state: 'idle', ev: [], i: 0
+    },
+    summer: {
+      title: 'Summer, III. Presto', meta: SUM_META, url: 'static/summer-presto.mp3', gain: 1, dur: 159, drama: 1, sub: 'Presto · the summer storm',
+      note: 'Vivaldi’s Summer ends in a storm, so the galaxy gets one too. It whirls faster as the orchestra builds, heels over at each stroke of the full band, and its core flashes like lightning.',
+      buf: null, state: 'idle', ev: [], env: Array.from(SUM_E, c => parseInt(c, 36)/35), i: 0, j: 0
+    }
+  };
   NOTES.forEach((n, i) => {
     const k = Math.min(i, REC_T.length - 1);          // the last five notes are the final chord, struck together
-    REC.ev.push({ t: REC_T[k], midi: n.midi, vel: REC_V[k], voice: n.voice, bar: n.bar });
+    PIECES.bach.ev.push({ t: REC_T[k], midi: n.midi, vel: REC_V[k], voice: n.voice, bar: n.bar });
   });
+  SUM_DT.split(',').reduce((t, d, i) => {
+    t += d/1000;
+    PIECES.summer.ev.push({ t, k: +SUM_K[i], vel: parseInt(SUM_V[i], 36)/35*1.8 });
+    return t;
+  }, 0);
+  let REC = PIECES.bach;      // the piece on the stand now
+  let wantPlay = false;       // play was pressed before its recording had arrived
+  let failNote = '';          // a recording that failed to load, still to be mentioned
 
   /* ------------------------------------------------------------------
      Audio
@@ -1815,10 +1963,11 @@
       s.start(at, pos);
       T.src = s; T.t0 = at - pos;
       if (rec) {
+        recGain.gain.value = REC.gain;
         let i = 0;
         while (i < REC.ev.length && REC.ev[i].t < pos - 1e-4) i++;
-        REC.i = i;
-        if (i < REC.ev.length) curBar = REC.ev[i].bar;
+        REC.i = REC.j = i;
+        if (REC.bars && i < REC.ev.length) curBar = REC.ev[i].bar;
       }
     }
     T.started = true; T.offset = pos;
@@ -1835,7 +1984,9 @@
 
   /* Recorded audio: three frequency bands stand in for the three voices.
      A band's sudden rise counts as a note. */
-  const BANDS = [[30, 180], [180, 1500], [1500, 8000]].map((b, k) => ({ lo: b[0], hi: b[1], peak: 0.1, fast: 0, slow: 0, lastOn: -1, armed: true, thr: [0.10, 0.09, 0.08][k], gap: [0.20, 0.12, 0.09][k] }));
+  const BANDS = [[30, 180], [180, 1500], [1500, 8000]].map((b, k) => ({ lo: b[0], hi: b[1], peak: 0.1, fast: 0, slow: 0, lastOn: -1, lvl: 0, armed: true, thr: [0.10, 0.09, 0.08][k], gap: [0.20, 0.12, 0.09][k] }));
+  const OWN = { dr: 0, lastStrike: -1, ref: null, slow: 0, armed: true };
+  const camDir = { x: 1, z: 0 };       // the lean that tips the disk's face towards the camera
   function analyse(dt, now) {
     an.getByteFrequencyData(fa);
     const hz = ctx.sampleRate/an.fftSize;
@@ -1845,6 +1996,7 @@
       let s = 0;
       for (let i = a; i <= b; i++) s += fa[i];
       const e = s/((b - a + 1)*255);
+      B.lvl = e;
       B.peak = Math.max(B.peak*Math.exp(-dt*0.06), e, 0.1);
       const en = e/B.peak;
       B.fast += (en - B.fast)*(1 - Math.exp(-dt/0.035));
@@ -1865,12 +2017,32 @@
     M.eRaw = Math.max(M.eRaw, (BANDS[1].fast + BANDS[2].fast)*0.35);
     M.levelT = clamp(total*1.25, 0, 1);
     M.moodT = clamp(0.3 + 0.7*(BANDS[0].slow - BANDS[2].slow), 0, 1);
+    // How dramatic is it? A full, bright, loud sound (an orchestra in full cry) storms; a soft or sparse one
+    // (a quiet piano) does not. The piece keeps that character for a while after a loud passage ends.
+    const st = clamp((0.6*BANDS[1].lvl + 1.4*BANDS[2].lvl - 0.22)/0.24, 0, 1);
+    M.stormT = st;
+    OWN.dr += (st - OWN.dr)*(1 - Math.exp(-dt/(st > OWN.dr ? 1.5 : 10)));
+    M.drT = clamp(OWN.dr*1.25, 0, 1);
+    M.hushT = OWN.dr > 0.3 && BANDS[1].lvl < 0.07 ? 1 : 0;          // a silence inside a stormy piece
+    // A stroke of the whole band: the spectrum as a whole jumps. Unlike the band onsets above, this still
+    // registers when the orchestra is already playing loudly.
+    if (!OWN.ref) OWN.ref = new Float32Array(fa.length);
+    const top = Math.min(fa.length - 1, Math.round(8000/hz)), kr = 1 - Math.exp(-dt/0.1);
+    let flux = 0;
+    for (let i = 2; i <= top; i++) { const d = fa[i] - OWN.ref[i]; if (d > 0) flux += d; OWN.ref[i] += d*kr; }
+    flux /= (top - 1)*255;
+    if (flux > 1.8*OWN.slow + 0.004 && OWN.armed && now - OWN.lastStrike > 0.36) {
+      OWN.armed = false; OWN.lastStrike = now;
+      strike(clamp(0.4 + 0.45*(flux/Math.max(OWN.slow, 1e-4) - 1.8), 0.4, 1.3), camDir.x, camDir.z);
+    } else if (flux < 1.15*OWN.slow) OWN.armed = true;
+    OWN.slow += (flux - OWN.slow)*(1 - Math.exp(-dt/1.2));
   }
 
   /* ------------------------------------------------------------------
      Transport and controls
   ------------------------------------------------------------------ */
   const playBtn = $('play'), seek = $('seek'), barEl = $('bar'), clockEl = $('clock');
+  const pieceBtns = [...document.querySelectorAll('[data-piece]')];
   let wakeLock = null, heardHint = false, seeking = false, idleTimer = 0;
 
   function wakeUI() {
@@ -1901,14 +2073,14 @@
 
   function toggle() {
     ensureAudio();
-    if (T.playing) { ctx.suspend(); setPlaying(false); REC.want = false; return; }
+    if (T.playing) { ctx.suspend(); setPlaying(false); wantPlay = false; return; }
     resuming = true;
     const p = ctx.resume();
-    const waiting = T.mode === 'rec' && REC.state === 'loading';
-    if (waiting) REC.want = true;
+    const waiting = T.mode === 'rec' && REC.state !== 'ready';
+    if (waiting) wantPlay = true;
     else if (!T.started) startAt(T.offset);
     setPlaying(true);
-    if (waiting) say('Loading the piano recording…');
+    if (waiting) say(LOADING);
     else if (!heardHint) {
       heardHint = true;
       say('No sound? Check the volume and your phone’s silent switch.', HINT, 7000);
@@ -1943,10 +2115,78 @@
   function setPiece(title, meta) {
     $('piece-meta').textContent = title + ' · ' + meta;
     const own = T.mode === 'file';
-    $('back-bach').hidden = !own;
-    if (own) barEl.textContent = 'Bass, middle and treble bands';
+    pieceBtns.forEach(b => b.setAttribute('aria-pressed', String(!own && PIECES[b.dataset.piece] === REC)));
+    $('own').classList.toggle('on', own);
+    barEl.textContent = own ? 'Bass, middle and treble bands' : T.mode === 'rec' && !REC.bars ? REC.sub : 'Bar ' + curBar + ' of ' + TOTAL_BARS;
     resize();
   }
+
+  // Fetch and decode a piece's recording. Whoever is waiting for it is started when it arrives.
+  async function loadPiece(P) {
+    if (P.state !== 'idle') return;
+    P.state = 'loading';
+    // url may be a list of addresses: each is tried in turn until one gives a recording that decodes
+    let ok = false;
+    for (const url of [].concat(P.url)) {
+      try {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const ab = await r.arrayBuffer();
+        const OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+        const oc = new OC(2, 1, 44100);
+        P.buf = await new Promise((res, rej) => { const q = oc.decodeAudioData(ab, res, rej); if (q && q.catch) q.catch(rej); });
+        ok = true;
+        break;
+      } catch (e) {}
+    }
+    P.state = ok ? 'ready' : 'failed';
+    if (REC !== P || T.mode === 'file') return;            // the listener has moved on to something else
+    if (P.state === 'ready') {
+      T.dur = P.buf.duration;
+      if (!wantPlay && statusEl.textContent === LOADING) say(P.note);
+    } else if (P === PIECES.bach) {
+      T.mode = 'bach'; T.dur = BACH_DUR; T.started = false; T.offset = 0;
+      setPiece(P.title, SYNTH_META);
+      say('The piano recording could not be loaded, so this is a synthesised version of the same prelude.');
+    } else {
+      setMusic('bach');
+      failNote = 'The Vivaldi recording could not be loaded, so this is the Bach prelude again.';
+      say(failNote);
+      if (!wantPlay) failNote = '';
+      return;
+    }
+    if (wantPlay) {
+      wantPlay = false;
+      if (T.playing && !T.started) {
+        startAt(T.offset);
+        if (P.state === 'ready') say(failNote || 'No sound? Check the volume and your phone’s silent switch.', P.drama ? P.note : HINT, 7000);
+        failNote = '';
+      }
+    }
+  }
+
+  // Put another piece on the stand.
+  function setMusic(key) {
+    const P = PIECES[key];
+    if (!P || (P === REC && T.mode !== 'file')) return;
+    stopSrc(); killSession(); wantPlay = false;
+    T.buffer = null; T.started = false; T.offset = 0; curBar = 1;
+    REC = P; P.i = 0;
+    // A decoded recording takes about 56 MB. On a phone, let go of the one that is no longer on the stand.
+    if (mobile) Object.values(PIECES).forEach(O => { if (O !== P && O.state === 'ready') { O.buf = null; O.state = 'idle'; } });
+    if (P.state === 'failed' && P !== PIECES.bach) P.state = 'idle';    // worth another try
+    const synth = P.state === 'failed';                                  // only the Bach prelude has a synthesised stand-in
+    T.mode = synth ? 'bach' : 'rec';
+    T.dur = synth ? BACH_DUR : P.buf ? P.buf.duration : P.dur;
+    setPiece(P.title, synth ? SYNTH_META : P.meta);
+    loadPiece(P);
+    if (T.playing && ctx && ctx.state === 'running') {
+      if (synth || P.state === 'ready') startAt(0);
+      else { wantPlay = true; say(LOADING); return; }
+    }
+    say(P.note, T.playing ? HINT : undefined, 10000);
+  }
+  pieceBtns.forEach(b => b.addEventListener('click', () => setMusic(b.dataset.piece)));
 
   function readFile(file) {
     if (file.arrayBuffer) return file.arrayBuffer();
@@ -1971,16 +2211,17 @@
     let buf;
     try { buf = await decode(await readFile(file)); }
     catch (e) { say('That file could not be decoded. Try an MP3, M4A or WAV.'); return; }
-    stopSrc(); killSession(); REC.want = false;
+    stopSrc(); killSession(); wantPlay = false;
     T.mode = 'file'; T.buffer = buf; T.dur = buf.duration; T.started = false; T.offset = 0;
-    BANDS.forEach(B => { B.peak = 0.1; B.fast = B.slow = 0; });
+    BANDS.forEach(B => { B.peak = 0.1; B.fast = B.slow = 0; B.lastOn = -1; });
+    OWN.dr = 0; OWN.lastStrike = -1; OWN.slow = 0; OWN.armed = true; if (OWN.ref) OWN.ref.fill(0);
     setPiece(file.name.replace(/\.[^.]+$/, '').replace(/_+/g, ' '), 'Your recording · ' + fmt(buf.duration));
     if (T.playing && ctx.state === 'running') {
       startAt(0);
-      say('Now the recording’s bass, middle and treble move the galaxy.', HINT, 7000);
+      say('Now the recording’s bass, middle and treble move the galaxy, and the fuller and louder it gets, the harder the galaxy storms.', HINT, 9000);
     } else {
       setPlaying(false);
-      say('Loaded. Press play. The recording’s bass, middle and treble will move the galaxy.');
+      say('Loaded. Press play. The recording’s bass, middle and treble will move the galaxy, and the fuller and louder it gets, the harder the galaxy storms.');
     }
   }
   $('file-input').addEventListener('change', e => { loadFile(e.target.files[0]); e.target.value = ''; });
@@ -1988,15 +2229,6 @@
   window.addEventListener('drop', e => {
     e.preventDefault();
     if (e.dataTransfer && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
-  });
-
-  $('back-bach').addEventListener('click', () => {
-    stopSrc();
-    T.buffer = null; T.started = false; T.offset = 0; curBar = 1;
-    if (REC.state === 'ready') { T.mode = 'rec'; T.dur = REC.buf.duration; setPiece('Prelude in C major', REC_META); }
-    else { T.mode = 'bach'; T.dur = BACH_DUR; setPiece('Prelude in C major', SYNTH_META); }
-    if (T.playing && ctx && ctx.state === 'running') startAt(0);
-    say(HINT);
   });
 
   const fsBtn = $('fs'), rootEl = document.documentElement;
@@ -2012,7 +2244,7 @@
       }
     } catch (e) { no(); }
   });
-  const fsLabel = () => { fsBtn.textContent = fsOn() ? 'Exit full screen' : 'Full screen'; };
+  const fsLabel = () => { const t = fsOn() ? 'Exit full screen' : 'Full screen'; fsBtn.title = t; fsBtn.setAttribute('aria-label', t); };
   document.addEventListener('fullscreenchange', fsLabel);
   document.addEventListener('webkitfullscreenchange', fsLabel);
 
@@ -2231,8 +2463,11 @@
 
     // Music in
     pump();
+    if (T.mode !== 'file') M.drT = T.mode === 'rec' ? REC.drama : 0;
+    { const sg = cam.el >= 0 ? 1 : -1; camDir.x = sg*Math.cos(cam.yaw); camDir.z = -sg*Math.sin(cam.yaw); }
     if (ctx && T.playing && T.started) {
       if (T.mode === 'bach') {
+        M.stormT = 0; M.hushT = 0;
         const heard = ctx.currentTime - Math.min(0.3, ctx.outputLatency || ctx.baseLatency || 0);
         while (vq.length && vq[0].t <= heard) {
           const ev = vq.shift().ev;
@@ -2245,63 +2480,82 @@
         M.levelT = clamp((M.act - 0.25)*2.6, 0, 1);
       } else if (T.mode === 'rec') {
         const heard = ctx.currentTime - T.t0 - Math.min(0.3, ctx.outputLatency || ctx.baseLatency || 0);
-        while (REC.i < REC.ev.length && REC.ev[REC.i].t <= heard) {
-          const ev = REC.ev[REC.i++];
-          hit(ev.voice, ev.vel, ev.midi >= M.last ? 1 : -1);
-          M.last = ev.midi;
-          M.act += 0.14*ev.vel;
-          M.moodT = BAR_MOOD[ev.bar - 1];
-          curBar = ev.bar;
+        if (REC.env) {
+          // A recording analysed ahead of time: its onsets band by band, the strokes of the whole band, and how hard
+          // it is playing. Knowing what is coming, the picture is sent out a frame or two early so that it reaches
+          // the eye with the sound, and the disk gathers itself just before each big stroke.
+          const at = heard + 0.03;
+          while (REC.j < REC.ev.length && REC.ev[REC.j].t <= at + 0.3) {
+            const ev = REC.ev[REC.j++];
+            if (ev.k === 4 && ev.vel >= 1) windup(ev.vel, camDir.x, camDir.z);
+          }
+          while (REC.i < REC.ev.length && REC.ev[REC.i].t <= at) {
+            const ev = REC.ev[REC.i++];
+            if (ev.k === 4) strike(ev.vel, camDir.x, camDir.z);
+            else hit(Math.min(ev.k, 2), ev.vel, ev.k === 3 ? -1 : 1);
+          }
+          const x = clamp(at*10, 0, REC.env.length - 1), i0 = Math.floor(x), e0 = REC.env[i0], e1 = REC.env[Math.min(i0 + 1, REC.env.length - 1)];
+          const e = e0 + (e1 - e0)*(x - i0);
+          M.levelT = 0.2 + 0.8*e; M.stormT = e; M.moodT = 0.3 + 0.6*e;
+          M.hushT = clamp(1 - e/0.08, 0, 1);       // a silence: the galaxy holds its breath
+        } else {
+          while (REC.i < REC.ev.length && REC.ev[REC.i].t <= heard) {
+            const ev = REC.ev[REC.i++];
+            hit(ev.voice, ev.vel, ev.midi >= M.last ? 1 : -1);
+            M.last = ev.midi;
+            M.act += 0.14*ev.vel;
+            M.moodT = BAR_MOOD[ev.bar - 1];
+            curBar = ev.bar;
+          }
+          M.levelT = clamp((M.act - 0.25)*2.6, 0, 1); M.stormT = 0; M.hushT = 0;
         }
-        M.levelT = clamp((M.act - 0.25)*2.6, 0, 1);
       } else analyse(dt, now);
-    } else { M.levelT = 0; M.moodT = 0.25; }
+    } else { M.levelT = 0; M.moodT = 0.25; M.stormT = 0; M.hushT = 0; }
     hAcc += Math.min(Math.max(0, raw), 0.5);
     while (hAcc >= hStep) { hAcc -= hStep; tick(); }
-    M.level += (M.levelT - M.level)*(1 - Math.exp(-dt/0.5));
-    M.slow += (M.level - M.slow)*(1 - Math.exp(-dt/4));
-    M.mood += (M.moodT - M.mood)*(1 - Math.exp(-dt/1.2));
+    settle(dt);
+    if (opts.force) opts.force(M);                       // test hook: hold the music state still
 
     // Galaxy state. The arm pattern turns at one rate while stars and gas orbit through it,
     // faster than the arms near the centre and slower at the rim. The music sets the pace of it all.
+    // A dramatic piece is taken harder: when it storms the whole galaxy whirls faster, its currents churn,
+    // and each stroke of the full band lands on it at once. For a calm piece none of that applies.
     const k = calm ? 0.35 : 1;
-    const om = 0.02 + k*(0.09*M.level + 0.22*M.bS + 0.09*M.eS);
+    const P = pose(dt, k), om = P.om, S = P.S, F = P.F;
     spin -= dt*om;
     p1 += (spin - p1)*(1 - Math.exp(-dt/0.55));          // the rim answers a surge later than the centre
     p2 += (p1 - p2)*(1 - Math.exp(-dt/0.75));
     if (spin < -50) { spin += 8*TAU; p1 += 8*TAU; p2 += 8*TAU; }
-    shearT += dt*(0.03 + 1.6*om);
+    shearT += dt*(0.03 + 1.6*Math.min(om, 0.45) + 0.3*Math.max(0, om - 0.45));
     U.uShear.value.x = opts.shear === undefined ? shearT % 1 : opts.shear;
     U.uDiff.value = U.uShear.value.y*shearT;
-    bobT += dt*(0.25 + 2.4*om);
+    bobT += dt*(0.25 + 2.4*Math.min(om, 0.6));
     U.uBob.value = bobT;
-    flowT += dt*(0.2 + k*(0.8*M.level + 0.4*M.bS));
+    flowT += dt*P.flowV;
     U.uFlow.value.set(flowT*0.61, flowT*0.47 + 1.3, flowT*0.83 + 2.1, flowT*0.71 + 4.0);
-    U.uFlowA.value = 0.004 + k*(0.006*M.level + 0.008*M.bS);
-    U.uBreath.value = 1 + k*(0.008*M.bS + 0.014*M.sB.x);
-    U.uPulse.value = k*clamp(0.6*M.bS + 0.3*M.eS, 0, 1);   // bursts of new stars with the notes
+    U.uFlowA.value = P.flowA;
+    U.uBreath.value = P.breath;
+    U.uPulse.value = P.pulse;
     U.uWebT.value += dt*(0.006 + 0.08*om);                 // in the supercluster, the music sets how fast galaxies stream
-    // the rim carries the galaxy's frame; the centre leans ahead of it, bending the disk softly
-    const ox = clamp(k*M.ox, -0.5, 0.5), oz = clamp(k*M.oz, -0.5, 0.5);
-    tiltE.set(ox, 0, oz);
+    tiltE.set(P.rx, 0, P.rz);
     tiltQ.setFromEuler(tiltE);
     tiltQi.copy(tiltQ).conjugate();
     galScene.quaternion.copy(tiltQ);
-    U.uWarp.value.set(clamp(k*M.tx.x, -0.5, 0.5) - ox, clamp(k*M.tz.x, -0.5, 0.5) - oz);
+    U.uWarp.value.set(P.wx, P.wz);
     volMat.uniforms.uH.value = 0.072 + 0.25*U.uWarp.value.length();
     U.uTime.value = now % 3600;
-    U.uSpark.value = 0.22 + 0.9*M.high;
-    volMat.uniforms.uCore.value = 1.3*M.bS;
+    U.uSpark.value = P.spark;
+    coreA = P.coreA; coreF = P.coreF;
     volMat.uniforms.uMood.value = M.mood;
     volMat.uniforms.uFrame.value = frameNo % 64;
     
 
     // Camera: a slow orbit that rises and falls, leaning in as the music grows
-    if (!cam.drag && !calm) cam.yaw += dt*(T.playing ? 0.032 : 0.012);
+    if (!cam.drag && !calm) cam.yaw += dt*(T.playing ? 0.032 + 0.06*S : 0.012);
     const el = clamp(cam.el + (calm ? 0 : GAL.sway*Math.sin(now*0.07 + 0.6)), -1.4, 1.4);
     const want = fitDist(el);
     cam.dist = cam.dist ? cam.dist + (want - cam.dist)*(1 - Math.exp(-dt*3)) : want;
-    const d = Math.max(1.3, cam.dist*cam.zoom*(1 - k*(0.05*M.level + 0.015*M.bS)));
+    const d = Math.max(1.3, cam.dist*cam.zoom*(1 - P.push));
     camera.position.set(Math.sin(cam.yaw)*Math.cos(el)*d, Math.sin(el)*d, Math.cos(cam.yaw)*Math.cos(el)*d);
     camera.up.set(0, 1, 0);
     camera.lookAt(0, 0, 0);
@@ -2331,7 +2585,9 @@
     tagEls.forEach(t => placeTag(t.el, t.p));
     // seen nearly edge-on the disk piles up along the line of sight, so ease the exposure down
     const sinInc = Math.abs(U.uCam.value.y)/Math.max(0.01, U.uCam.value.length());
-    finalMat.uniforms.uExposure.value = (1 + 0.07*M.bS)*(1 - 0.1*M.mood)*(0.66 + 0.34*sstep(0.12, 0.62, sinInc))/GAIN;
+    const fk = isWeb ? 1 : flareOf(live[0].part);
+    finalMat.uniforms.uBloom.value = 0.55 + 0.18*S + 0.14*F*fk;
+    finalMat.uniforms.uExposure.value = (1 + 0.07*M.bS + 0.18*F*fk)*(1 - 0.22*P.H)*(1 - 0.1*M.mood)*(0.66 + 0.34*sstep(0.12, 0.62, sinInc))/GAIN;
 
     // Draw. With two galaxies the farther goes down first, so the nearer one's dust falls across it.
     if (isWeb) {
@@ -2388,7 +2644,7 @@
         seek.style.setProperty('--p', (frac*100).toFixed(1) + '%');
         clockEl.textContent = fmt(pos) + ' / ' + fmt(T.dur);
       }
-      if (T.mode !== 'file') {
+      if (T.mode === 'bach' || (T.mode === 'rec' && REC.bars)) {
         const text = 'Bar ' + curBar + ' of ' + TOTAL_BARS;
         if (barEl.textContent !== text) barEl.textContent = text;
       }
@@ -2396,35 +2652,10 @@
 
     requestAnimationFrame(frame);
   }
-  // Fetch and decode the recording straight away, so it is ready by the time play is pressed.
-  (async () => {
-    try {
-      const r = await fetch(REC.url);
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const ab = await r.arrayBuffer();
-      const OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-      const oc = new OC(2, 1, 44100);
-      REC.buf = await new Promise((res, rej) => { const q = oc.decodeAudioData(ab, res, rej); if (q && q.catch) q.catch(rej); });
-      REC.state = 'ready';
-      if (T.mode === 'rec') T.dur = REC.buf.duration;
-    } catch (e) {
-      REC.state = 'failed';
-      if (T.mode === 'rec') {
-        T.mode = 'bach'; T.dur = BACH_DUR; T.started = false; T.offset = 0;
-        setPiece('Prelude in C major', SYNTH_META);
-        say('The piano recording could not be loaded, so this is a synthesised version of the same prelude.');
-      }
-    }
-    if (REC.want) {
-      REC.want = false;
-      if (T.playing && !T.started && T.mode !== 'file') {
-        startAt(T.offset);
-        if (REC.state === 'ready') say('No sound? Check the volume and your phone’s silent switch.', HINT, 7000);
-      }
-    }
-  })();
+  // Fetch and decode the Bach recording straight away, so it is ready by the time play is pressed.
+  loadPiece(PIECES.bach);
 
-  if (window.__muOpts) window.__mu = { REC, setGalaxy, M, cam, Q, T, hit, get an() { return an; } };
+  if (window.__muOpts) window.__mu = { get REC() { return REC; }, PIECES, setMusic, setGalaxy, M, cam, Q, T, hit, strike, U, POSE, get an() { return an; } };
   requestAnimationFrame(frame);
 })();
 </script>

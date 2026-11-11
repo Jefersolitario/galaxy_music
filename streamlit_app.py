@@ -1,4 +1,4 @@
-"""Musica Universalis: galaxies in 3D that move in time with Bach.
+"""Musica Universalis: galaxies in 3D that move with the music.
 
 The whole experience is one self-contained web page, index.html, drawn with WebGL
 in the visitor's browser. This Streamlit app's only job is to serve that page full
@@ -13,6 +13,10 @@ import streamlit as st
 
 ROOT = Path(__file__).parent
 
+# A second address for the Vivaldi recording, tried if Streamlit's static file
+# server cannot be reached from inside the page. Change it if you fork the repo.
+RAW = "https://raw.githubusercontent.com/Jefersolitario/galaxy_music/main/"
+
 st.set_page_config(
     page_title="Musica Universalis",
     page_icon="🌌",
@@ -21,20 +25,31 @@ st.set_page_config(
 )
 
 
+def swap(html: str, hook: str, new: str) -> str:
+    """Replace one of the page's recording addresses, failing loudly if it has moved."""
+    if html.count(hook) != 1:
+        raise RuntimeError("index.html no longer contains the recording hook: " + hook)
+    return html.replace(hook, new)
+
+
 @st.cache_data(show_spinner=False)
 def load_page() -> str:
-    """Return index.html with the piano recording embedded in it.
+    """Return index.html with its recordings pointed at places this app can serve.
 
-    On its own, index.html fetches prelude.mp3 from the folder it sits in. Inside
-    Streamlit the page runs in an iframe with no folder of its own, so the
-    recording is inlined as a data URL instead.
+    On its own, index.html fetches its recordings from the folder it sits in. Inside
+    Streamlit the page runs in an iframe with no folder of its own, so:
+
+    - the Bach recording, which plays first, is embedded in the page as a data URL;
+    - the Vivaldi recording is fetched only when the visitor chooses it, from
+      Streamlit's static file server (see .streamlit/config.toml), or failing that
+      from the copy in the GitHub repository.
     """
     html = (ROOT / "index.html").read_text(encoding="utf-8")
-    hook = "url: 'prelude.mp3'"
-    if hook not in html:
-        raise RuntimeError("index.html no longer contains the recording hook: " + hook)
-    audio = base64.b64encode((ROOT / "prelude.mp3").read_bytes()).decode("ascii")
-    return html.replace(hook, f"url: 'data:audio/mpeg;base64,{audio}'")
+    bach = base64.b64encode((ROOT / "prelude.mp3").read_bytes()).decode("ascii")
+    html = swap(html, "url: 'prelude.mp3'", f"url: 'data:audio/mpeg;base64,{bach}'")
+    vivaldi = "static/summer-presto.mp3"
+    html = swap(html, f"url: '{vivaldi}'", f"url: ['app/{vivaldi}', '{RAW}{vivaldi}']")
+    return html
 
 
 # Strip Streamlit's own chrome and padding and let the page fill the window.
