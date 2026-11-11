@@ -5,3 +5,7 @@ backgroundColor = "#000003"
 
 [client]
 toolbarMode = "minimal"
+
+# Serves the static/ folder at app/static/, so the page can fetch the Vivaldi recording when it is chosen.
+[server]
+enableStaticServing = true
