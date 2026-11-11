@@ -1,0 +1,2432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Galaxies in 3D that move in time with Bach's Prelude in C major.">
+<style>
+  body { margin: 0; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+<title>Musica Universalis</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@1,6..96,400;1,6..96,500&family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500&display=swap">
+<style>
+  /* Layout: one galaxy fills the frame like a film still. The piece is titled top-left as a
+     title card, the transport sits at the foot, and both fade away while the music plays. */
+  :root {
+    color-scheme: dark;
+    --void: #000003;
+    --ink: #efeae0;
+    --dim: #a3a5b8;
+    --faint: rgba(239, 234, 224, 0.18);
+    --gilt: #e9c98a;
+    --gilt-wash: rgba(233, 201, 138, 0.1);
+    --display: "Bodoni Moda", "Didot", "Bodoni MT", "Times New Roman", serif;
+    --mono: "DM Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  html, body { height: 100%; }
+  body {
+    background: var(--void);
+    color: var(--ink);
+    font-family: var(--body);
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  p, h1 { margin: 0; }
+
+  #sky {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    display: block;
+    touch-action: none;
+    cursor: grab;
+  }
+  #sky.dragging { cursor: grabbing; }
+  body.idle #sky { cursor: none; }
+
+  .programme, .dock { transition: opacity 0.9s ease; }
+  body.idle .programme, body.idle .dock { opacity: 0; }
+  body.idle .dock-in { pointer-events: none; }
+
+  .programme {
+    position: fixed; inset: 0 0 auto 0;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 16px);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid; gap: 6px; justify-items: start;
+    pointer-events: none;
+    text-shadow: 0 0 12px var(--void), 0 0 3px var(--void);
+  }
+  .eyebrow {
+    font: 500 10px/1 var(--mono);
+    letter-spacing: 0.24em; text-transform: uppercase;
+    color: var(--gilt);
+  }
+  h1 {
+    font: italic 400 clamp(26px, 6.2vw, 40px)/1.05 var(--display);
+    max-width: 24ch;
+    text-wrap: balance; overflow-wrap: anywhere;
+  }
+  .meta {
+    font: 400 11px/1.4 var(--mono);
+    letter-spacing: 0.04em;
+    color: var(--dim);
+    max-width: 62ch;
+  }
+  .meta.music { margin-top: 6px; opacity: 0.8; }
+
+  .dock {
+    position: fixed; inset: auto 0 0 0;
+    padding-top: 56px;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    background: linear-gradient(to top, rgba(0, 0, 3, 0.9) 30%, rgba(0, 0, 3, 0));
+    pointer-events: none;
+  }
+  .dock-in {
+    max-width: 560px; margin-inline: auto;
+    display: grid; gap: 12px;
+    pointer-events: auto;
+  }
+
+  .transport {
+    display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center;
+  }
+  .play {
+    width: 54px; height: 54px; border-radius: 50%;
+    border: 1px solid var(--gilt);
+    background: var(--gilt-wash);
+    color: var(--gilt);
+    display: grid; place-items: center;
+    padding: 0; cursor: pointer;
+    transition: background 0.2s;
+  }
+  .play:hover { background: rgba(233, 201, 138, 0.22); }
+  .play svg { width: 20px; height: 20px; fill: currentColor; }
+  .track { display: grid; gap: 6px; min-width: 0; }
+  .readout {
+    display: flex; justify-content: space-between; gap: 12px;
+    font: 400 11px/1.2 var(--mono);
+    color: var(--dim);
+    font-variant-numeric: tabular-nums;
+  }
+  #bar { color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
+  #clock { white-space: nowrap; }
+
+  input[type="range"] {
+    --p: 0%;
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 20px; margin: 0;
+    background: transparent; cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 2px;
+    background: linear-gradient(to right, var(--gilt) var(--p), var(--faint) var(--p));
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px; margin-top: -5px;
+    border: 0; border-radius: 50%;
+    background: var(--gilt);
+  }
+  input[type="range"]::-moz-range-track { height: 2px; background: var(--faint); }
+  input[type="range"]::-moz-range-progress { height: 2px; background: var(--gilt); }
+  input[type="range"]::-moz-range-thumb {
+    width: 12px; height: 12px; border: 0; border-radius: 50%; background: var(--gilt);
+  }
+
+  .pick { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+  .galaxies {
+    display: flex; gap: 6px;
+    overflow-x: auto; scrollbar-width: none; scroll-behavior: smooth;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
+    padding-inline: 10px;
+  }
+  .galaxies::-webkit-scrollbar { display: none; }
+  .nav {
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 1px solid var(--faint);
+    background: rgba(0, 0, 3, 0.45);
+    color: var(--ink);
+    font: 400 18px/1 var(--body);
+    display: grid; place-items: center;
+    padding: 0 0 2px; cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .nav:hover { color: var(--gilt); border-color: var(--gilt); }
+  .chip {
+    font: 500 11px/1 var(--mono);
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--dim);
+    border: 1px solid var(--faint);
+    background: rgba(0, 0, 3, 0.45);
+    padding: 9px 13px;
+    border-radius: 999px;
+    flex: none; white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+  }
+  .chip:hover { color: var(--ink); }
+  .chip[aria-pressed="true"] { color: var(--gilt); border-color: var(--gilt); background: var(--gilt-wash); }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn {
+    font: 500 11px/1 var(--mono);
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink);
+    border: 1px solid var(--faint);
+    background: rgba(0, 0, 3, 0.45);
+    padding: 11px 12px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .btn:hover { color: var(--gilt); border-color: var(--gilt); }
+  .sr {
+    position: absolute; width: 1px; height: 1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  .status {
+    font: 400 12.5px/1.45 var(--body);
+    color: var(--dim);
+    min-height: 2.9em;
+    max-width: 62ch;
+  }
+
+  .play:focus-visible, .btn:focus-visible, .chip:focus-visible, .nav:focus-visible,
+  input[type="range"]:focus-visible, .sr:focus-visible + .btn {
+    outline: 2px solid var(--gilt); outline-offset: 3px;
+  }
+
+  .tag {
+    position: fixed; left: 0; top: 0;
+    pointer-events: none; white-space: nowrap;
+    font: 500 9.5px/1 var(--mono);
+    letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--ink);
+    margin-left: 14px; padding: 4px 6px;
+    background: rgba(0, 0, 3, 0.6);
+    border-radius: 2px;
+    will-change: transform;
+  }
+  .tag::before {
+    content: ""; position: absolute; left: -13px; top: 50%;
+    width: 11px; height: 1px; background: var(--gilt);
+  }
+
+  .fallback {
+    position: fixed; inset: 0;
+    display: grid; place-items: center;
+    padding-inline: 24px;
+    text-align: center;
+    font: 400 15px/1.5 var(--body);
+    color: var(--ink);
+    background: var(--void);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .play, .btn, .chip, .nav, .programme, .dock { transition: none; }
+    .galaxies { scroll-behavior: auto; }
+  }
+</style>
+</head>
+<body>
+<canvas id="sky" aria-label="A galaxy in three dimensions that moves with the music"></canvas>
+
+<header class="programme" id="programme">
+  <p class="eyebrow">Musica universalis</p>
+  <h1 id="galaxy-name">Grand-design spiral</h1>
+  <p class="meta" id="galaxy-sub">An imagined galaxy · two-armed spiral seen from above</p>
+  <p class="meta music" id="piece-meta">Prelude in C major · J. S. Bach · BWV 846 · Kimiko Ishizaka, piano</p>
+</header>
+
+<div class="dock" id="dock">
+  <div class="dock-in" id="dock-in">
+    <div class="pick">
+      <button class="nav" id="prev" type="button" aria-label="Previous galaxy">‹</button>
+      <div class="galaxies" id="galaxies" role="group" aria-label="Galaxy"></div>
+      <button class="nav" id="next" type="button" aria-label="Next galaxy">›</button>
+    </div>
+
+    <div class="transport">
+      <button class="play" id="play" type="button" aria-label="Play">
+        <svg id="ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 4.5v15l12.5-7.5z"/></svg>
+        <svg id="ico-pause" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z"/></svg>
+      </button>
+      <div class="track">
+        <div class="readout">
+          <span id="bar">Bar 1 of 35</span>
+          <span id="clock">0:00 / 0:00</span>
+        </div>
+        <input type="range" id="seek" min="0" max="1000" value="0" step="1" aria-label="Position in the piece">
+      </div>
+    </div>
+
+    <div class="actions">
+      <input class="sr" type="file" id="file-input" accept="audio/*">
+      <label class="btn" for="file-input">Play your own recording</label>
+      <button class="btn" id="back-bach" type="button" hidden>Back to the Bach prelude</button>
+      <button class="btn" id="fs" type="button">Full screen</button>
+    </div>
+
+    <p class="status" id="status" role="status">Press play. Stars and gas sweep through the spiral arms, faster near the centre, as they do in a real galaxy. The music sets the pace: bass notes surge the spin and lean the disk, and new stars light up along the arms.</p>
+  </div>
+</div>
+
+<div id="tags" aria-hidden="true" hidden></div>
+
+<p class="fallback" id="fallback" hidden>This browser could not start WebGL 2, so the galaxy cannot be drawn here. Try a current version of Chrome, Safari or Firefox.</p>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const fail = msg => { const f = $('fallback'); if (msg) f.textContent = msg; f.hidden = false; };
+  if (!window.THREE) { fail(); return; }
+
+  const canvas = $('sky');
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, depth: false, stencil: false, powerPreference: 'high-performance' });
+  } catch (e) { fail(); return; }
+  if (!renderer.capabilities.isWebGL2) { fail(); return; }
+  const gl = renderer.getContext();
+  const opts = window.__muOpts || {};
+  const HDR = !opts.ldr && !!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'));
+  renderer.autoClear = false;
+  renderer.setClearColor(0x000000, 1);
+  canvas.addEventListener('webglcontextlost', e => {
+    e.preventDefault();
+    fail('The graphics context was lost. Reload the page to bring the galaxy back.');
+  });
+
+  const TAU = Math.PI * 2;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  const calm = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const mobile = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches) || Math.min(screen.width, screen.height) < 700;
+
+  // Render budget. The frame loop lowers these if the device cannot keep up.
+  const Q = {
+    maxMain: mobile ? 2.8e6 : 4.4e6,   // pixels in the full-resolution star layer
+    maxVol: mobile ? 0.7e6 : 1.15e6,   // pixels in the gas-and-dust layer
+    steps: mobile ? 24 : 34,           // samples through the disk per pixel
+    stars: mobile ? 170000 : 320000,
+    bake: opts.bake || 2048,
+    scale: 1, volK: 1, drops: 0, noGain: 0, lastAvg: 0, undo: [],
+    adaptive: opts.adaptive !== false
+  };
+  const GAIN = HDR ? 1 : 0.2;          // without float targets, squeeze the range into 8 bits
+  const RT_TYPE = HDR ? THREE.HalfFloatType : THREE.UnsignedByteType;
+
+  /* ------------------------------------------------------------------
+     Status line
+  ------------------------------------------------------------------ */
+  const statusEl = $('status');
+  const HINT = 'Drag to orbit. Pinch or scroll to zoom. The controls fade while the music plays; tap to bring them back.';
+  let statusTimer = 0;
+  function say(text, thenText, ms) {
+    statusEl.textContent = text;
+    clearTimeout(statusTimer);
+    if (thenText) statusTimer = setTimeout(() => { statusEl.textContent = thenText; }, ms || 8000);
+  }
+
+  /* ------------------------------------------------------------------
+     Shaders
+  ------------------------------------------------------------------ */
+  const TEXS = 1.12;
+  const GL_COMMON = `
+    #define TEXS 1.12
+    #define HD (0.012*uDustH)
+    #define HY 0.014
+    #define HO 0.028
+    #define KD (230.0*uDustK)
+    vec2 rot(vec2 p, float a) { float c = cos(a), s = sin(a); return vec2(c*p.x - s*p.y, s*p.x + c*p.y); }
+  `;
+
+  // Shared by the gas and the stars, so both flow as one liquid.
+  const GL_FLOW = `
+    uniform vec3 uP;        // spin angle of the arm pattern at the centre, mid-disk and rim
+    uniform vec4 uFlow;     // phases of the slow currents within the disk
+    uniform float uFlowA;
+    uniform vec2 uWarp;     // how far the centre has tipped ahead of the rim
+    uniform float uDustK;   // how opaque this galaxy's dust is
+    uniform float uDustH;   // and how thick its dust layer is
+    uniform vec2 uShear;    // x: where flow layer one is in its cycle; y: how far a layer is carried per cycle
+    float ang(float r) { float s = clamp(r, 0.0, 1.0); return mix(mix(uP.x, uP.y, s), mix(uP.y, uP.z, s), s); }
+    // Orbital speed relative to the arm pattern. As in a real disk with a flat rotation curve, material
+    // inside corotation (r = 0.6) overtakes the arms and material outside it falls behind.
+    float wrel(float r) { return 1.0/(r + 0.25) - 1.18; }
+    vec2 flow(vec2 q) {
+      return uFlowA*smoothstep(0.02, 0.4, length(q))*vec2(sin(3.3*q.y + uFlow.x) + 0.5*sin(6.1*q.x + uFlow.z),
+                                                          sin(3.7*q.x + uFlow.y) + 0.5*cos(5.3*q.y + uFlow.w));
+    }
+    float warpH(vec2 xz, float r) { return (1.0 - smoothstep(0.0, 0.9, r))*(uWarp.y*xz.x - uWarp.x*xz.y); }
+    // The painted galaxy, carried round by that relative motion. Two copies half a cycle apart are
+    // cross-faded, so gas streams through the arms continuously without the picture ever winding up.
+    vec4 galaxy(sampler2D map, vec2 q, float r, float lod) {
+      float w = wrel(r)*uShear.y;
+      float o1 = (uShear.x - 0.5)*w, o2 = (fract(uShear.x + 0.5) - 0.5)*w;
+      vec2 qp = vec2(-q.y, q.x);
+      vec2 qa = q + o1*qp - 0.5*o1*o1*q, qb = q + o2*qp - 0.5*o2*o2*q;
+      return mix(textureLod(map, qb/(2.0*TEXS) + 0.5, lod), textureLod(map, qa/(2.0*TEXS) + 0.5, lod), 1.0 - abs(2.0*uShear.x - 1.0));
+    }
+  `;
+
+  const FS_VERT = `
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+
+  /* The galaxy's face-on structure, painted once into a texture:
+     R = young blue stars (sqrt), G = old stellar disk, B = pink star-forming regions (sqrt), A = dust. */
+  const BAKE_FRAG = `
+    varying vec2 vUv;
+    uniform vec4 uSeed;
+    ${GL_COMMON}
+    #define BETA 2.5
+    float hash12(vec2 p) { vec3 p3 = fract(vec3(p.xyx)*0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y)*p3.z); }
+    vec2 hash22(vec2 p) { vec3 p3 = fract(vec3(p.xyx)*vec3(0.1031, 0.1030, 0.0973)); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.xx + p3.yz)*p3.zy); }
+    float gn(vec2 p) {
+      vec2 i = floor(p), f = fract(p);
+      vec2 u = f*f*f*(f*(f*6.0 - 15.0) + 10.0);
+      float a = dot(hash22(i)*2.0 - 1.0, f);
+      float b = dot(hash22(i + vec2(1.0, 0.0))*2.0 - 1.0, f - vec2(1.0, 0.0));
+      float c = dot(hash22(i + vec2(0.0, 1.0))*2.0 - 1.0, f - vec2(0.0, 1.0));
+      float d = dot(hash22(i + vec2(1.0, 1.0))*2.0 - 1.0, f - vec2(1.0, 1.0));
+      return mix(mix(a, b, u.x), mix(c, d, u.x), u.y)*1.5;
+    }
+    float fbm(vec2 p) {
+      float s = 0.0, a = 0.5;
+      for (int i = 0; i < 5; i++) { s += a*gn(p); p = mat2(1.6, 1.2, -1.2, 1.6)*p + 17.3; a *= 0.5; }
+      return s;
+    }
+    float fbm3(vec2 p) {
+      float s = 0.0, a = 0.5;
+      for (int i = 0; i < 3; i++) { s += a*gn(p); p = mat2(1.6, 1.2, -1.2, 1.6)*p + 17.3; a *= 0.5; }
+      return s;
+    }
+    float blobs(vec2 p, float thr, float rad) {
+      vec2 i = floor(p), f = fract(p);
+      float s = 0.0;
+      for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+        vec2 o = vec2(float(x), float(y));
+        vec2 h = hash22(i + o);
+        float k = hash12(i + o + 3.7);
+        vec2 d = o + h - f;
+        float rr = rad*(0.45 + 1.2*fract(k*7.3));
+        s += step(thr, k)*exp(-dot(d, d)/(rr*rr));
+      }
+      return s;
+    }
+    void main() {
+      vec2 p = (vUv - 0.5)*2.0*TEXS;
+      float r = length(p);
+      float lr = log(max(r, 0.035));
+      float th = atan(p.y, p.x);
+      vec2 sp = rot(p, -BETA*lr);        // unwound: noise here comes out sheared along the arms
+      vec2 sq = rot(p, -BETA*lr*0.5);
+      float w1 = fbm3(sq*1.7 + uSeed.xy);
+      float w2 = fbm3(sp*2.6 + uSeed.zw);
+      float phi = th - BETA*lr + 1.1*w1 + 0.35*w2;
+      float a2 = 0.5 + 0.5*cos(2.0*phi);
+      float armN = pow(a2, 3.0), armB = pow(a2, 1.5);
+      float brPhase = 4.0*phi + 2.0 + 1.7*w1;
+      float outer = smoothstep(0.3, 0.6, r);
+      float branch = pow(0.5 + 0.5*cos(brPhase), 5.0)*outer;
+      float arm = max(armN, 0.55*branch);
+
+      float f1 = fbm(sp*4.2 + uSeed.yx + 3.1);
+      float f2 = fbm(sp*9.5 + uSeed.wz + 9.2);
+      float f3 = fbm(sp*22.0 + uSeed.xy + 31.0);
+      float iso = fbm(p*24.0 + uSeed.xz);
+      float iso2 = fbm3(p*58.0 + uSeed.wy);
+      float clump = smoothstep(-0.15, 0.45, f1 + 0.55*f2 + 0.3*f3);
+      float grain = (0.5 + 1.0*smoothstep(-0.25, 0.3, iso))*(0.85 + 0.5*iso2);
+      float spur = pow(clamp(f2*1.8 + 0.25, 0.0, 1.0), 2.0)*smoothstep(-0.1, 0.3, f1);
+      float edge = 1.0 - smoothstep(0.58, 1.0 + 0.16*w1, r);
+      float inner = smoothstep(0.05, 0.2, r);
+      float fall = exp(-r/0.5);
+
+      float young = inner*edge*fall*(arm*(0.2 + 2.0*clump*(0.4 + 0.6*clump)) + armB*0.2*(0.4 + clump) + 0.03 + 0.16*spur)*grain;
+      float kn = blobs(p*40.0 + uSeed.xy*13.0, 0.72, 0.24);
+      young += inner*edge*fall*arm*kn*0.9*clump;
+      float hii = (blobs(p*30.0 + uSeed.zw*29.0, 0.80, 0.20) + blobs(p*13.0 + uSeed.yx*7.0, 0.90, 0.16))
+                *pow(arm, 1.5)*inner*edge*(0.25 + clump);
+
+      float ph2 = phi + 0.55;
+      float lane = pow(0.5 + 0.5*cos(2.0*ph2), 6.0);
+      float laneB = pow(0.5 + 0.5*cos(2.0*ph2), 2.0);
+      float lane4 = pow(0.5 + 0.5*cos(brPhase + 1.1), 6.0)*outer;
+      float rg1 = pow(clamp(1.0 - abs(fbm(sp*6.5 + uSeed.xw + 21.0))*2.6, 0.0, 1.0), 2.4);
+      float rg2 = pow(clamp(1.0 - abs(fbm(sp*15.0 + uSeed.zy + 41.0))*3.0, 0.0, 1.0), 3.0);
+      float rg3 = pow(clamp(1.0 - abs(fbm(sp*34.0 + uSeed.yw + 61.0))*3.2, 0.0, 1.0), 3.0);
+      float ptc = smoothstep(-0.1, 0.35, fbm3(sp*3.0 + 55.0));
+      float dEnv = smoothstep(0.03, 0.10, r)*(1.0 - smoothstep(0.5, 0.95, r));
+      float dust = dEnv*(lane*(0.55 + 0.6*rg1) + 0.4*lane4*(0.4 + rg1)
+                 + laneB*(0.45*rg1*ptc + 0.4*rg2) + 0.2*rg2*ptc + 0.22*rg3*(0.25 + laneB));
+
+      float old = (0.42 + 0.42*armB + 0.26*f1 + 0.12*f2)*(1.0 - smoothstep(0.8, 1.08, r));
+      gl_FragColor = vec4(sqrt(clamp(young, 0.0, 1.0)), clamp(old, 0.0, 1.0), sqrt(clamp(hii, 0.0, 1.0)), clamp(dust, 0.0, 1.0));
+    }`;
+
+  // One painter for the rest of the catalogue: arms, a bar, up to two rings and the dust that goes with them,
+  // each set by a few numbers per galaxy.
+  const BAKE_GEN = BAKE_FRAG.slice(0, BAKE_FRAG.indexOf('void main()')) + `
+    uniform vec4 uArm;     // number of arms, how tightly wound, how narrow, how strong
+    uniform vec4 uArm2;    // branching, irregularity, flocculent patches between arms, chaotic dust
+    uniform vec4 uBar;     // half-length (0 = none), width ratio, strength, dust lanes along it
+    uniform vec4 uRing1;   // radius, width, young stars, dust
+    uniform vec4 uRing2;
+    uniform vec4 uDsk;     // inner clearing, outer edge, scale length of young stars, where the old disk fades
+    uniform vec4 uAmt;     // young stars, nebulae, dust, how far the dust lane leads the arm
+    void main() {
+      vec2 p = (vUv - 0.5)*2.0*TEXS;
+      float r = length(p);
+      float th = atan(p.y, p.x);
+      float beta = uArm.y, m = uArm.x, rb = uBar.x;
+      float lr = log(max(r, max(rb, 0.035)));          // inside a bar nothing winds: the arms start at its ends
+      vec2 sp = rot(p, -beta*lr);
+      vec2 sq = rot(p, -beta*lr*0.5);
+      float w1 = fbm3(sq*1.7 + uSeed.xy);
+      float w2 = fbm3(sp*2.6 + uSeed.zw);
+      float phi = th - beta*lr + uArm2.y*(1.1*w1 + 0.35*w2)*smoothstep(rb*0.8, rb*1.4 + 0.05, r);
+      float a2 = 0.5 + 0.5*cos(m*phi);
+      float armN = pow(a2, uArm.z), armB = pow(a2, 0.5*uArm.z);
+      float brPhase = 2.0*m*phi + 2.0 + 1.7*w1;
+      float outer = smoothstep(0.3, 0.6, r);
+      float branch = uArm2.x*pow(0.5 + 0.5*cos(brPhase), 5.0)*outer;
+      float arm = max(armN, 0.55*branch)*uArm.w;
+
+      float f1 = fbm(sp*4.2 + uSeed.yx + 3.1);
+      float f2 = fbm(sp*9.5 + uSeed.wz + 9.2);
+      float f3 = fbm(sp*22.0 + uSeed.xy + 31.0);
+      float iso = fbm(p*24.0 + uSeed.xz);
+      float iso2 = fbm3(p*58.0 + uSeed.wy);
+      float clump = smoothstep(-0.15, 0.45, f1 + 0.55*f2 + 0.3*f3);
+      float grain = (0.5 + 1.0*smoothstep(-0.25, 0.3, iso))*(0.85 + 0.5*iso2);
+      float spur = pow(clamp(f2*1.8 + 0.25, 0.0, 1.0), 2.0)*smoothstep(-0.1, 0.3, f1);
+      float edge = 1.0 - smoothstep(uDsk.y*0.6, uDsk.y*(1.0 + 0.16*w1), r);
+      float inner = smoothstep(uDsk.x*0.3, uDsk.x + 0.02, r);
+      float fall = exp(-r/uDsk.z);
+      float t1 = (r - uRing1.x - 0.02*w1)/uRing1.y, t2 = (r - uRing2.x - 0.03*w1)/uRing2.y;
+      float g1 = exp(-t1*t1), g2 = exp(-t2*t2);
+      float ringY = uRing1.z*g1 + uRing2.z*g2, ringD = uRing1.w*g1 + uRing2.w*g2;
+      float base = inner*edge*fall;
+
+      float young = (base*(arm*(0.2 + 2.0*clump*(0.4 + 0.6*clump)) + armB*uArm.w*0.2*(0.4 + clump) + 0.03 + uArm2.z*0.16*spur)
+                  + ringY*(0.3 + 1.1*clump))*grain;
+      float kn = blobs(p*40.0 + uSeed.xy*13.0, 0.72, 0.24);
+      young = uAmt.x*(young + (base*arm + 0.7*ringY)*kn*0.9*clump);
+      float hii = uAmt.y*(blobs(p*30.0 + uSeed.zw*29.0, 0.80, 0.20) + blobs(p*13.0 + uSeed.yx*7.0, 0.90, 0.16))
+                *(pow(arm, 1.5)*inner*edge + 1.3*ringY)*(0.25 + clump);
+
+      float ph2 = phi + uAmt.w;
+      float lane = pow(0.5 + 0.5*cos(m*ph2), 6.0);
+      float laneB = pow(0.5 + 0.5*cos(m*ph2), 2.0);
+      float lane4 = uArm2.x*pow(0.5 + 0.5*cos(brPhase + 1.1), 6.0)*outer;
+      float rg1 = pow(clamp(1.0 - abs(fbm(sp*6.5 + uSeed.xw + 21.0))*2.6, 0.0, 1.0), 2.4);
+      float rg2 = pow(clamp(1.0 - abs(fbm(sp*15.0 + uSeed.zy + 41.0))*3.0, 0.0, 1.0), 3.0);
+      float rg3 = pow(clamp(1.0 - abs(fbm(sp*34.0 + uSeed.yw + 61.0))*3.2, 0.0, 1.0), 3.0);
+      float ptc = smoothstep(-0.1, 0.35, fbm3(sp*3.0 + 55.0));
+      float dEnv = smoothstep(0.03, 0.10, r)*(1.0 - smoothstep(uDsk.y*0.5, uDsk.y*0.95, r));
+      float dust = dEnv*min(uArm.w, 1.0)*(lane*(0.55 + 0.6*rg1) + 0.4*lane4*(0.4 + rg1)
+                 + laneB*(0.45*rg1*ptc + 0.4*rg2) + 0.2*rg2*ptc + 0.22*rg3*(0.25 + laneB))
+                 + ringD*(0.35 + 0.65*rg1)
+                 + uArm2.w*dEnv*(0.5*rg1*ptc + 0.5*rg2 + 0.3*rg3);
+
+      float bar = 0.0;
+      if (rb > 0.0) {
+        vec2 bq = rot(p, -beta*log(rb));               // along and across the bar
+        float bx = bq.x/rb, by = bq.y/(rb*uBar.y);
+        bar = uBar.z*exp(-1.2*bx*bx - by*by);
+        // straight dust lanes down the bar's leading edges, one on each side of the nucleus
+        float off = 0.28*rb*uBar.y*sign(bq.x)*smoothstep(0.0, 0.3*rb, abs(bq.x));
+        float bl = (bq.y - off)/(0.12*rb*uBar.y + 0.004);
+        dust += uBar.w*exp(-bl*bl)*(1.0 - smoothstep(rb*0.6, rb*1.05, abs(bq.x)))*smoothstep(0.02, 0.06, r);
+      }
+      float old = (0.42 + 0.42*armB*min(uArm.w, 1.0) + 0.26*f1 + 0.12*f2)*(1.0 - smoothstep(uDsk.w, uDsk.w + 0.28, r)) + bar;
+      gl_FragColor = vec4(sqrt(clamp(young, 0.0, 1.0)), clamp(old, 0.0, 1.0), sqrt(clamp(hii, 0.0, 1.0)), clamp(uAmt.z*dust, 0.0, 1.0));
+    }`;
+
+  // The Sombrero, M104: a smooth, tightly wound old disk with a broad, clumpy ring of dust near its rim.
+  const BAKE_M104 = BAKE_FRAG.slice(0, BAKE_FRAG.indexOf('void main()')) + `
+    void main() {
+      vec2 p = (vUv - 0.5)*2.0*TEXS;
+      float r = length(p);
+      float lr = log(max(r, 0.035));
+      float th = atan(p.y, p.x);
+      float wind = 7.5;                              // wound so tightly the arms are almost rings
+      vec2 sp = rot(p, -wind*lr);
+      float w1 = fbm3(rot(p, -wind*lr*0.5)*1.5 + uSeed.xy);
+      float phi = th - wind*lr + 0.8*w1;
+      float a2 = 0.5 + 0.5*cos(2.0*phi);
+      float f1 = fbm(sp*4.0 + uSeed.yx + 3.1);
+      float f2 = fbm(sp*9.0 + uSeed.wz + 9.2);
+      float f3 = fbm(sp*21.0 + uSeed.xy + 31.0);
+      float iso = fbm(p*26.0 + uSeed.xz);
+      float edge = 1.0 - smoothstep(0.93, 1.04 + 0.04*w1, r);
+      float rg1 = pow(clamp(1.0 - abs(fbm(sp*6.0 + uSeed.xw + 21.0))*2.6, 0.0, 1.0), 2.2);
+      float rg2 = pow(clamp(1.0 - abs(fbm(sp*14.0 + uSeed.zy + 41.0))*3.0, 0.0, 1.0), 2.6);
+      float rg3 = pow(clamp(1.0 - abs(fbm(sp*30.0 + uSeed.yw + 61.0))*3.2, 0.0, 1.0), 3.0);
+      float clump = smoothstep(-0.3, 0.35, f1 + 0.6*f2 + 0.3*f3);
+      // the dust: one broad ring near the rim, a fainter lane inside it, and fine threads between
+      float tr = (r - 0.88 - 0.02*w1)/0.07, tl = (r - 0.66)/0.05;
+      float ring = exp(-tr*tr);
+      float lane = 0.5*exp(-tl*tl);
+      float dust = edge*(ring*(0.5 + 0.45*rg1 + 0.3*clump) + lane*(0.35 + 0.65*rg2) + 0.10*rg3*smoothstep(0.3, 0.5, r))*(0.8 + 0.2*a2);
+      // it forms few stars: a thin scatter of young ones along the ring
+      float young = 0.5*edge*smoothstep(0.55, 0.8, r)*(0.08 + 0.3*a2*clump)*(0.6 + 0.8*smoothstep(-0.2, 0.3, iso));
+      float hii = 0.5*blobs(p*34.0 + uSeed.zw*29.0, 0.93, 0.18)*ring*edge;
+      float old = (0.62 + 0.16*a2 + 0.18*f1 + 0.08*f2)*(1.0 - smoothstep(0.72, 0.9, r));
+      gl_FragColor = vec4(sqrt(clamp(young, 0.0, 1.0)), clamp(old, 0.0, 1.0), sqrt(clamp(hii, 0.0, 1.0)), clamp(dust, 0.0, 1.0));
+    }`;
+
+  // Faint all-sky glow behind everything, painted once as a latitude-longitude map.
+  const SKY_FRAG = `
+    varying vec2 vUv;
+    uniform float uEnc;
+    float hash13(vec3 p3) { p3 = fract(p3*0.1031); p3 += dot(p3, p3.zyx + 31.32); return fract((p3.x + p3.y)*p3.z); }
+    float vn(vec3 p) {
+      vec3 i = floor(p), f = fract(p);
+      f = f*f*(3.0 - 2.0*f);
+      float a = mix(mix(hash13(i), hash13(i + vec3(1,0,0)), f.x), mix(hash13(i + vec3(0,1,0)), hash13(i + vec3(1,1,0)), f.x), f.y);
+      float b = mix(mix(hash13(i + vec3(0,0,1)), hash13(i + vec3(1,0,1)), f.x), mix(hash13(i + vec3(0,1,1)), hash13(i + vec3(1,1,1)), f.x), f.y);
+      return mix(a, b, f.z);
+    }
+    float fb(vec3 p) {
+      float s = 0.0, a = 0.5;
+      for (int i = 0; i < 5; i++) { s += a*vn(p); p = p*2.03 + 11.7; a *= 0.5; }
+      return s;
+    }
+    void main() {
+      float lon = (vUv.x - 0.5)*6.2831853, lat = (vUv.y - 0.5)*3.14159265;
+      vec3 d = vec3(cos(lat)*cos(lon), sin(lat), cos(lat)*sin(lon));
+      vec3 n = normalize(vec3(0.35, 0.8, -0.5));
+      float bn = dot(d, n)/0.3;
+      float band = exp(-bn*bn);
+      float f = fb(d*2.2 + 3.0), g = fb(d*5.5 + 11.0), h = fb(d*11.0 + 7.0);
+      float cloud = smoothstep(0.35, 0.8, f*0.6 + g*0.4);
+      float dark = smoothstep(0.45, 0.7, g*0.5 + h*0.5);
+      vec3 col = vec3(0.0030, 0.0038, 0.0075)*(0.15 + band*1.5)*(0.4 + 1.2*cloud);
+      col += vec3(0.005, 0.002, 0.004)*band*smoothstep(0.55, 0.85, h*0.5 + f*0.5);
+      col *= 1.0 - 0.75*dark*band;
+      gl_FragColor = vec4(col*uEnc, 1.0);
+    }`;
+
+  // Gas, dust and unresolved starlight: a ray march through the disk.
+  const VOL_VERT = `
+    uniform mat4 uInvProj, uCamWorld;
+    varying vec3 vRay;
+    void main() {
+      vec4 v = uInvProj*vec4(position.xy, 1.0, 1.0);
+      vRay = (uCamWorld*vec4(v.xyz/v.w, 0.0)).xyz;
+      gl_Position = vec4(position.xy, 0.0, 1.0);
+    }`;
+  const VOL_FRAG = `
+    precision highp sampler2D;
+    varying vec3 vRay;
+    uniform sampler2D uMap, uSky;
+    uniform mat3 uSkyRot;
+    uniform vec3 uCam;
+    uniform float uBreath, uH, uFrame, uPix, uTexels, uCore, uMood, uGain, uSkyK, uPulse, uDither;
+    uniform int uSteps;
+    uniform float uDisk;
+    ${GL_COMMON}
+    ${GL_FLOW}
+    uniform vec3 uK;                       // brightness of young stars, nebulae and the old disk
+    uniform vec3 uB1, uB2, uB3;            // bulge, nucleus and halo: radius, flattening, brightness
+    uniform vec3 uB1c, uB2c, uB3c;
+    uniform float uOldR;                   // scale length of the old disk
+    #define KY uK.x
+    #define KH uK.y
+    #define KO uK.z
+    float ign(vec2 p) { return fract(52.9829189*fract(dot(p, vec2(0.06711056, 0.00583715)))); }
+    // A flattened Plummer bulge integrated along the ray in closed form; the part
+    // behind the disk's mid-plane is dimmed by the dust the ray crossed.
+    vec3 bulge(vec3 ro, vec3 rd, float a, float q, float tm, vec3 T) {
+      vec3 sc = vec3(1.0, 1.0/q, 1.0);
+      vec3 o = ro*sc, d = rd*sc;
+      float L2 = dot(d, d), L = sqrt(L2);
+      float tc = -dot(o, d)/L2;
+      float b2 = max(dot(o, o) - L2*tc*tc, 0.0);
+      float k = 1.0 + b2/(a*a);
+      float A2 = a*a + b2;
+      float s = L*(tm - tc);
+      float fr = tm > 0.0 ? clamp(0.5 + s*(3.0*A2 + 2.0*s*s)/(4.0*pow(A2 + s*s, 1.5)), 0.0, 1.0) : 1.0;
+      return (fr + (1.0 - fr)*T)/(k*k*L);
+    }
+    void main() {
+      vec3 rd = normalize(vRay), ro = uCam;
+      vec3 C = vec3(0.0), T = vec3(1.0);
+      float ry = abs(rd.y) > 1e-4 ? rd.y : (rd.y < 0.0 ? -1e-4 : 1e-4);
+      float b = dot(ro, rd), c = dot(ro, ro) - 1.21;
+      float disc = b*b - c;
+      if (uDisk > 0.5 && disc > 0.0) {
+        float sq = sqrt(disc);
+        float ta = (-uH - ro.y)/ry, tb = (uH - ro.y)/ry;
+        float t0 = max(max(min(ta, tb), -b - sq), 0.0);
+        float t1 = min(max(ta, tb), -b + sq);
+        if (t1 > t0) {
+          float ds = (t1 - t0)/float(uSteps);
+          float t = t0 + ds*ign(gl_FragCoord.xy + uFrame*vec2(5.588238, 3.1717));
+          float fp = 0.5*(t0 + t1)*uPix*inversesqrt(max(abs(rd.y), 0.1));
+          float lod = max(0.0, log2(max(fp, ds*length(rd.xz)*0.35)*uTexels));
+          vec3 kx = vec3(0.70, 0.95, 1.32);
+          vec3 cY = mix(vec3(0.30, 0.52, 1.0), vec3(0.78, 0.48, 0.82), uMood*0.5);
+          vec3 cH = mix(vec3(1.0, 0.22, 0.40), vec3(1.0, 0.18, 0.24), uMood*0.5);
+          vec3 cO = vec3(1.0, 0.84, 0.64);
+          float dsy = 1.4*ds*abs(rd.y);
+          float hd = max(HD, dsy), hy = max(HY, dsy), hh = max(0.0095, dsy);
+          float nd = HD/hd, ny = HY/hy, nh = 0.0095/hh;
+          for (int i = 0; i < uSteps; i++) {
+            vec3 p = ro + rd*t;
+            vec2 xz = p.xz/uBreath;
+            float r = length(xz);
+            float y = p.y - warpH(xz, r);
+            float y2 = y*y;
+            if (y2 < 9.0*HO*HO) {
+              vec2 q = rot(xz, -ang(r));
+              vec4 m = galaxy(uMap, q + flow(q), r, lod);
+              float wd = nd*exp(-y2/(hd*hd)), wy = ny*exp(-y2/(hy*hy)), wh = nh*exp(-y2/(hh*hh)), wo = exp(-y2/(HO*HO));
+              vec3 E = cY*(m.r*m.r*wy*KY*(1.0 + 0.45*uPulse))
+                     + cH*(m.b*m.b*wh*KH*(1.0 + 0.8*uPulse))
+                     + cO*(m.g*exp(-r/uOldR)*wo*KO*(1.0 + 0.15*uPulse));
+              C += T*E*((1.0 - 0.5*m.a)*ds);
+              T *= exp(-kx*(m.a*wd*KD*ds));
+            }
+            t += ds;
+          }
+        }
+      }
+      float tm = -ro.y/ry;
+      float fl = 1.0 + 0.55*uCore;
+      C += uB1c*(uB1.z*fl)*bulge(ro, rd, uB1.x*(1.0 + 0.1*uCore), uB1.y, tm, T);
+      C += uB2c*(uB2.z*fl)*bulge(ro, rd, uB2.x, uB2.y, tm, T);
+      if (uB3.z > 0.0) C += uB3c*uB3.z*bulge(ro, rd, uB3.x, uB3.y, tm, T);
+      float Ta = dot(T, vec3(0.3333));
+      vec3 sd = uSkyRot*rd;      // the sky stays put while the galaxy tips
+      vec2 suv = vec2(atan(sd.z, sd.x)*0.15915494 + 0.5, asin(clamp(sd.y, -1.0, 1.0))*0.31830989 + 0.5);
+      vec3 sky = textureLod(uSky, suv, 0.0).rgb*uSkyK;
+      gl_FragColor = vec4(C*uGain + sky*Ta + (ign(gl_FragCoord.yx + uFrame*1.7) - 0.5)*uDither, Ta);
+    }`;
+
+  const COMP_FRAG = `
+    precision highp sampler2D;
+    varying vec2 vUv;
+    uniform sampler2D tVol;
+    void main() { gl_FragColor = texture2D(tVol, vUv); }`;
+
+  // Resolved stars of the galaxy. Each one is dimmed by whatever dust lies between it and the camera.
+  const STAR_VERT = `
+    precision highp sampler2D;
+    attribute vec3 aCol;
+    attribute vec4 aMisc;   // size, seed, drift, response to the music
+    uniform sampler2D uMap;
+    uniform vec3 uCam;
+    uniform float uBreath, uDiff, uBob, uPixel, uMinPx, uTime, uSpark, uGain, uPuff, uPulse, uScale;
+    varying vec3 vCol;
+    ${GL_COMMON}
+    ${GL_FLOW}
+    void main() {
+      float still = step(1.5, aMisc.z);                 // satellite galaxies keep their place beside the disk
+      float drift = min(aMisc.z, 1.0);
+      vec2 pq = position.xz - flow(position.xz)*(1.0 - still);
+      float r = length(pq);
+      float g = uPulse;
+      float wr = wrel(r);
+      // Old stars orbit steadily, passing through the arms. Young ones are born with the gas they
+      // light up: each rides one of the two flow layers, brightening and fading with it.
+      float fL = fract(uShear.x + (aMisc.y < 0.5 ? 0.0 : 0.5));
+      float life = mix(1.9*(1.0 - abs(2.0*fL - 1.0)), 1.0, drift);
+      float a = (ang(r) - mix((fL - 0.5)*wr*uShear.y, uDiff*wr, drift))*(1.0 - still);
+      vec2 fx = rot(pq, a);
+      float lift = warpH(fx, r);
+      // every disk star also bobs up and down through the disk as it goes round
+      float bob = 1.25*cos(uBob*(0.7 + 0.6*aMisc.y) + aMisc.y*50.0);
+      float y = position.y*mix(1.0, bob, (1.0 - smoothstep(0.04, 0.12, abs(position.y)))*(1.0 - still))*(1.0 + g*uPuff*aMisc.w) + lift;
+      vec3 w = vec3(fx.x*uBreath, y, fx.y*uBreath);
+      vec3 d = w - uCam;
+      float att = 1.0;
+      float sgn = uCam.y >= lift ? 1.0 : -1.0;
+      float frac = clamp(0.5 - 0.5*sgn*(y - lift)/HD, 0.0, 1.0);
+      if (frac > 0.001) {
+        float t = clamp((uCam.y - lift)/(uCam.y - y + sgn*1e-5), 0.0, 1.0);
+        vec2 X = (uCam.xz + d.xz*t)/uBreath;
+        float rX = length(X);
+        vec2 q = rot(X, -ang(rX));
+        float dust = galaxy(uMap, q + flow(q), rX, 1.5).a;
+        float ci = max(abs(d.y)/length(d), 0.14);
+        att = exp(-dust*KD*HD*1.7725*frac/ci);
+      }
+      vec4 mv = modelViewMatrix*vec4(w, 1.0);
+      gl_Position = projectionMatrix*mv;
+      float ps = aMisc.x*uScale*uPixel/max(-mv.z, 0.05);
+      float px = max(ps, uMinPx);
+      gl_PointSize = min(px, 64.0);
+      float tw = 1.0 + uSpark*aMisc.w*0.5*sin(uTime*(3.0 + aMisc.y*9.0) + aMisc.y*120.0);
+      vCol = aCol*pow(vec3(att), vec3(0.72, 0.95, 1.3))*(ps*ps/(px*px))*tw*life*(1.0 + g*aMisc.w*0.6)*uGain;
+    }`;
+  const STAR_FRAG = `
+    varying vec3 vCol;
+    void main() {
+      vec2 q = gl_PointCoord*2.0 - 1.0;
+      float d = dot(q, q);
+      if (d > 1.0) discard;
+      gl_FragColor = vec4(vCol*exp(-d*4.5), 1.0);
+    }`;
+
+  // A supercluster: every point is a whole galaxy, carried along a curved path towards its attractor.
+  const WEB_VERT = `
+    attribute vec3 aB, aG, aTint;   // the path's control point, the attractor it ends at, and the galaxy's colour
+    attribute vec4 aMisc;           // place along the path, size, brightness, speed (0 = stays put)
+    uniform float uT, uPixel, uMinPx, uGain, uPulse, uTime;
+    varying vec3 vCol;
+    varying vec3 vShape;
+    void main() {
+      float s = pow(fract(aMisc.x + uT*aMisc.w), 1.8), u = 1.0 - s;
+      bool moving = aMisc.w > 0.0;
+      vec3 p = moving ? u*u*position + 2.0*u*s*aB + s*s*aG : position;
+      float fade = moving ? smoothstep(0.0, 0.07, s)*(1.0 - smoothstep(0.8, 1.0, s)) : 1.0;
+      vec4 mv = modelViewMatrix*vec4(p, 1.0);
+      gl_Position = projectionMatrix*mv;
+      float ps = aMisc.y*uPixel/max(-mv.z, 0.05);
+      float px = max(ps, uMinPx);
+      gl_PointSize = min(px, 64.0);
+      float seed = fract(aMisc.x*7.13 + aMisc.y*311.0);
+      float tw = 1.0 + 0.2*sin(uTime*(0.8 + seed*2.0) + seed*90.0);
+      vCol = aTint*aMisc.z*fade*tw*(ps*ps/(px*px))*(1.0 + 0.9*uPulse)*uGain;
+      float a = seed*6.2832;
+      vShape = vec3(cos(a), sin(a), 1.0 + 2.2*fract(seed*5.7));     // each galaxy is a small tilted ellipse
+    }`;
+  const WEB_FRAG = `
+    varying vec3 vCol;
+    varying vec3 vShape;
+    void main() {
+      vec2 q = gl_PointCoord*2.0 - 1.0;
+      vec2 e = vec2(vShape.x*q.x + vShape.y*q.y, (vShape.x*q.y - vShape.y*q.x)*vShape.z);
+      float d = dot(e, e);
+      if (d > 1.0) discard;
+      gl_FragColor = vec4(vCol*exp(-d*4.0), 1.0);
+    }`;
+  // The flow lines galaxies follow, with light running along them towards the attractor.
+  const WEBLINE_VERT = `
+    attribute vec4 aL;      // place along the line, seed, kind (0 = light runs along it, 2 = steady outline), weight
+    attribute vec3 aC;
+    uniform float uT, uGain, uPulse, uDpr;
+    varying vec3 vCol;
+    void main() {
+      gl_Position = projectionMatrix*modelViewMatrix*vec4(position, 1.0);
+      float s = aL.x;
+      float run = pow(0.5 + 0.5*sin(6.2832*(s*3.0 - uT*8.0 + aL.y)), 3.0);
+      float fade = smoothstep(0.0, 0.12, s)*(1.0 - smoothstep(0.72, 1.0, s));
+      float I = aL.z > 1.5 ? 0.30 : (0.06 + 0.34*run*(1.0 + 1.4*uPulse))*fade*(0.6 + 0.4*s);
+      vCol = aC*(I*aL.w*uDpr*uGain);
+    }`;
+  const WEBLINE_FRAG = `
+    varying vec3 vCol;
+    void main() { gl_FragColor = vec4(vCol, 1.0); }`;
+
+  // Foreground and background field stars; the few bright ones get diffraction spikes.
+  const FIELD_VERT = `
+    attribute vec4 aS;      // size, seed, temperature, brightness
+    uniform float uDpr, uTime, uGain;
+    varying vec3 vCol;
+    varying float vSpike;
+    void main() {
+      gl_Position = projectionMatrix*modelViewMatrix*vec4(position, 1.0);
+      gl_PointSize = min(aS.x*uDpr, 120.0);
+      vec3 c = aS.z < 0.5 ? mix(vec3(1.0, 0.70, 0.46), vec3(1.0, 0.96, 0.90), aS.z*2.0)
+                          : mix(vec3(1.0, 0.96, 0.90), vec3(0.68, 0.80, 1.0), aS.z*2.0 - 1.0);
+      float tw = 1.0 + 0.18*sin(uTime*(0.7 + aS.y*2.2) + aS.y*80.0);
+      vCol = c*aS.w*tw*uGain;
+      vSpike = step(8.0, aS.x);
+    }`;
+  const FIELD_FRAG = `
+    varying vec3 vCol;
+    varying float vSpike;
+    void main() {
+      vec2 q = gl_PointCoord*2.0 - 1.0;
+      float d = dot(q, q);
+      float I = exp(-d*5.5);
+      if (vSpike > 0.5) {
+        vec2 a = abs(q);
+        float fade = 1.0 - smoothstep(0.55, 1.0, max(a.x, a.y));
+        I = exp(-d*260.0) + 0.05*exp(-d*24.0)
+          + 0.32*(exp(-a.y*70.0)*exp(-a.x*4.0) + exp(-a.x*70.0)*exp(-a.y*4.0))*fade;
+      }
+      gl_FragColor = vec4(vCol*I, 1.0);
+    }`;
+
+  const PRE_FRAG = `
+    precision highp sampler2D;
+    varying vec2 vUv;
+    uniform sampler2D tSrc;
+    uniform vec2 uTexel;
+    uniform float uThr, uMax;
+    vec3 tap(vec2 o) {
+      vec3 c = min(texture2D(tSrc, vUv + o*uTexel).rgb, vec3(uMax));
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      return c*(max(l - uThr, 0.0)/max(l, 1e-4));
+    }
+    void main() {
+      vec3 s = tap(vec2(0.0))*4.0 + tap(vec2(1.0, 1.0)) + tap(vec2(-1.0, 1.0)) + tap(vec2(1.0, -1.0)) + tap(vec2(-1.0, -1.0));
+      gl_FragColor = vec4(s/8.0, 1.0);
+    }`;
+  const DOWN_FRAG = `
+    precision highp sampler2D;
+    varying vec2 vUv;
+    uniform sampler2D tSrc;
+    uniform vec2 uTexel;
+    void main() {
+      vec3 s = texture2D(tSrc, vUv).rgb*4.0;
+      s += texture2D(tSrc, vUv + uTexel).rgb + texture2D(tSrc, vUv - uTexel).rgb;
+      s += texture2D(tSrc, vUv + vec2(uTexel.x, -uTexel.y)).rgb + texture2D(tSrc, vUv + vec2(-uTexel.x, uTexel.y)).rgb;
+      gl_FragColor = vec4(s/8.0, 1.0);
+    }`;
+  const UP_FRAG = `
+    precision highp sampler2D;
+    varying vec2 vUv;
+    uniform sampler2D tSrc, tAdd;
+    uniform vec2 uTexel;
+    uniform float uMix;
+    void main() {
+      vec2 h = uTexel;
+      vec3 s = texture2D(tSrc, vUv + vec2(-2.0*h.x, 0.0)).rgb + texture2D(tSrc, vUv + vec2(2.0*h.x, 0.0)).rgb
+             + texture2D(tSrc, vUv + vec2(0.0, 2.0*h.y)).rgb + texture2D(tSrc, vUv + vec2(0.0, -2.0*h.y)).rgb;
+      s += 2.0*(texture2D(tSrc, vUv + vec2(-h.x, h.y)).rgb + texture2D(tSrc, vUv + h).rgb
+              + texture2D(tSrc, vUv + vec2(h.x, -h.y)).rgb + texture2D(tSrc, vUv - h).rgb);
+      gl_FragColor = vec4(mix(texture2D(tAdd, vUv).rgb, s/12.0, uMix), 1.0);
+    }`;
+  const FINAL_FRAG = `
+    precision highp sampler2D;
+    varying vec2 vUv;
+    uniform sampler2D tScene, tBloom;
+    uniform float uExposure, uBloom, uTime, uAspect;
+    vec3 aces(vec3 x) { return clamp((x*(2.51*x + 0.03))/(x*(2.43*x + 0.59) + 0.14), 0.0, 1.0); }
+    float h12(vec2 p) { vec3 p3 = fract(vec3(p.xyx)*0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y)*p3.z); }
+    void main() {
+      vec2 c = vUv - 0.5;
+      vec2 off = c*dot(c, c)*0.006;
+      vec3 col = vec3(texture2D(tScene, vUv - off).r, texture2D(tScene, vUv).g, texture2D(tScene, vUv + off).b);
+      col += texture2D(tBloom, vUv).rgb*uBloom;
+      vec2 v = c*vec2(min(uAspect, 1.0), min(1.0/uAspect, 1.0))*2.0;
+      col *= uExposure*(1.0 - 0.38*smoothstep(0.55, 1.5, length(v)));
+      col = pow(aces(col), vec3(1.0/2.2));
+      col += (h12(gl_FragCoord.xy + fract(uTime)*91.7) - 0.5)*(2.4/255.0);
+      gl_FragColor = vec4(col, 1.0);
+    }`;
+
+  /* ------------------------------------------------------------------
+     Render plumbing
+  ------------------------------------------------------------------ */
+  const mkRT = (w, h, o) => new THREE.WebGLRenderTarget(w, h, Object.assign({
+    type: RT_TYPE, format: THREE.RGBAFormat,
+    minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+    depthBuffer: false, stencilBuffer: false, generateMipmaps: false
+  }, o || {}));
+  const fsScene = new THREE.Scene(), fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const fsMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), null);
+  fsMesh.frustumCulled = false;
+  fsScene.add(fsMesh);
+  function blit(mat, target) {
+    fsMesh.material = mat;
+    renderer.setRenderTarget(target);
+    renderer.render(fsScene, fsCam);
+  }
+  const plain = { depthTest: false, depthWrite: false };
+  const additive = { depthTest: false, depthWrite: false, transparent: true, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor };
+  function bakeInto(mat, rt, strips) {
+    rt.scissorTest = true;
+    for (let i = 0; i < strips; i++) {
+      const y0 = Math.floor(rt.height*i/strips), y1 = Math.floor(rt.height*(i + 1)/strips);
+      rt.scissor.set(0, y0, rt.width, y1 - y0);
+      blit(mat, rt);
+    }
+    rt.scissorTest = false;
+    rt.scissor.set(0, 0, rt.width, rt.height);
+  }
+
+  // A small copy of each painted galaxy is read back to decide where its stars go.
+  const SM = 512;
+  const smallRT = new THREE.WebGLRenderTarget(SM, SM, { type: THREE.UnsignedByteType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, stencilBuffer: false });
+  const mapPx = new Uint8Array(SM*SM*4);
+
+  /* ------------------------------------------------------------------
+     The catalogue. Each entry is one or two disks (a colliding pair needs
+     two), each a painted map, a bulge and a mix of star populations, plus
+     optional streams of stars or gas, labels, and a starting view.
+     These are likenesses built from each object's known structure, not
+     copies of photographs. To add a galaxy, add an entry here.
+  ------------------------------------------------------------------ */
+  const disk = o => Object.assign({
+    frag: BAKE_GEN, seed: [3.7, 11.2, 5.9, 23.4],
+    arm: [2, 2.5, 3.0, 1.0], arm2: [1.0, 1.0, 1.0, 0], bar: [0, 0.3, 0, 0],
+    ring1: [0.5, 0.05, 0, 0], ring2: [0.8, 0.05, 0, 0], dsk: [0.18, 1.0, 0.5, 0.8], amt: [1, 1, 1, 0.55],
+    k: [38, 90, 11.5], oldR: 0.27, dustK: 1, dustH: 1,
+    b1: [0.085, 0.72, 2.4], b1c: [1.0, 0.80, 0.55], b2: [0.013, 0.9, 18], b2c: [1.0, 0.93, 0.80], b3: [0.5, 0.8, 0], b3c: [1, 1, 1],
+    pop: { bulge: 0.12, old: 0.34, young: 0.51, hii: 0.03 }, bulgeA: 0.05, bulgeMax: 0.5, sats: [],
+    pos: [0, 0, 0], rot: [0, 0, 0], scale: 1, spinK: 1, phase: 0.6
+  }, o);
+  const tail = o => Object.assign({ wa: [0.1, 0.07, 0.1], wb: [0.09, 0.07, 0.09], wg: [0.06, 0.05, 0.06], n: 14000, size: 0.0021, bright: 0.07, tint: [0.78, 0.86, 1.0], speed: 0.7, lines: 0 }, o);
+  const plume = sgn => ({ a: [0, 0.02*sgn, 0], wa: [0.12, 0.015, 0.08], b: [0.04*sgn, 0.22*sgn, 0], wb: [0.15, 0.05, 0.1], g: [0.08*sgn, 0.5*sgn, 0.02*sgn], wg: [0.27, 0.1, 0.18],
+    n: 34000, size: 0.003, bright: 0.026, tint: [1.0, 0.24, 0.2], speed: 2.0, lines: 9, lineK: 0.3 });
+  const WEB_MW_POS = [0.80, 0.05, 0.42];
+  const GALAXIES = {
+    spiral: {
+      chip: 'Grand-design spiral', name: 'Grand-design spiral', sub: 'An imagined galaxy · two-armed spiral seen from above',
+      blurb: 'A grand-design spiral, seen from above its disk: two bright arms, blue star clusters and pink nebulae.',
+      parts: [disk({ frag: BAKE_FRAG })],
+      el: 0.62, sway: 0.2, minH: 0.24
+    },
+    andromeda: {
+      chip: 'Andromeda · M31', name: 'Andromeda Galaxy', sub: 'M31 · NGC 224 · our nearest large neighbour · 2.5 million light-years',
+      blurb: 'Andromeda, M31: a tightly wound spiral tipped towards us, with a broad warm bulge, rings of dust and young stars, and its two small companions M32 and M110.',
+      parts: [disk({
+        seed: [5.1, 9.4, 2.2, 17.3], arm: [2, 4.2, 2.2, 0.75], arm2: [0.6, 0.7, 0.8, 0],
+        ring1: [0.5, 0.05, 0.5, 0.55], ring2: [0.78, 0.06, 0.3, 0.35], dsk: [0.16, 1.0, 0.55, 0.85], amt: [0.8, 0.6, 1.3, 0.5],
+        k: [28, 70, 13], oldR: 0.34, dustK: 1.2,
+        b1: [0.13, 0.62, 2.8], b1c: [1.0, 0.82, 0.58], b2: [0.016, 0.9, 16], b3: [0.5, 0.7, 0.05], b3c: [1.0, 0.86, 0.66],
+        pop: { bulge: 0.2, old: 0.42, young: 0.315, hii: 0.015 }, bulgeA: 0.08, bulgeMax: 0.7,
+        sats: [{ pos: [0.12, -0.2, 0.05], a: 0.02, frac: 0.02, q: 0.85 }, { pos: [-0.3, 0.42, -0.1], a: 0.045, frac: 0.03, q: 0.6 }]
+      })],
+      tags: [{ t: 'M32', p: [0.12, -0.2, 0.05] }, { t: 'M110', p: [-0.3, 0.42, -0.1] }],
+      el: 0.23, sway: 0.05, minH: 0.5
+    },
+    m104: {
+      chip: 'Sombrero · M104', name: 'Sombrero Galaxy', sub: 'M104 · NGC 4594 · seen almost edge-on · about 30 million light-years',
+      blurb: 'The Sombrero Galaxy, M104, seen almost edge-on: a huge glowing bulge circled by a dark ring of dust, with some 2,000 globular clusters around it.',
+      parts: [disk({
+        frag: BAKE_M104, seed: [8.3, 2.6, 14.1, 6.7],
+        k: [10, 45, 11.5], oldR: 0.6, dustK: 1.2, dustH: 1.45,
+        b1: [0.25, 0.66, 1.6], b1c: [1.0, 0.90, 0.72], b2: [0.02, 0.9, 13], b2c: [1.0, 0.95, 0.85], b3: [0.62, 0.8, 0.17], b3c: [1.0, 0.92, 0.78],
+        pop: { bulge: 0.52, old: 0.385, young: 0.08, hii: 0.009 }, bulgeA: 0.15, bulgeMax: 1.3      // the rest are globular clusters
+      })],
+      el: 0.105, sway: 0.045, minH: 0.52
+    },
+    m82: {
+      chip: 'Cigar · M82', name: 'Cigar Galaxy', sub: 'M82 · NGC 3034 · starburst galaxy seen edge-on · about 12 million light-years',
+      blurb: 'The Cigar Galaxy, M82: a dusty disk seen edge-on, forming stars so fast that red plumes of hydrogen are blown out above and below it.',
+      parts: [disk({
+        seed: [12.4, 3.3, 7.7, 19.1], arm: [2, 2.0, 1.2, 0.5], arm2: [0.6, 2.4, 1.4, 1.0],
+        dsk: [0.03, 0.85, 0.4, 0.6], amt: [1.3, 1.6, 1.1, 0.5],
+        k: [48, 90, 15], oldR: 0.3, dustK: 1.1, dustH: 1.25,
+        b1: [0.07, 0.6, 1.6], b2: [0.03, 0.7, 6],
+        pop: { bulge: 0.08, old: 0.42, young: 0.46, hii: 0.04 }
+      })],
+      streams: [plume(1), plume(-1)],
+      el: 0.16, sway: 0.05, minH: 0.5, fit: 0.85
+    },
+    m94: {
+      chip: 'M94 · NGC 4736', name: 'Messier 94', sub: 'NGC 4736 · spiral with a starburst ring · Canes Venatici',
+      blurb: 'Messier 94: a bright core wrapped in a tight ring where new stars are forming, with a second, much fainter ring far outside it.',
+      parts: [disk({
+        seed: [1.9, 14.6, 8.8, 4.2], arm: [2, 5.0, 1.8, 0.45], arm2: [0.4, 1.3, 1.2, 0],
+        ring1: [0.23, 0.035, 3.2, 0.6], ring2: [0.84, 0.11, 0.08, 0.04], dsk: [0.1, 0.62, 0.35, 0.5], amt: [1, 1.6, 1, 0.5],
+        b1: [0.07, 0.8, 3.0], b2: [0.012, 0.9, 22],
+        pop: { bulge: 0.16, old: 0.36, young: 0.45, hii: 0.03 }
+      })],
+      el: 0.95, sway: 0.16, minH: 0.3
+    },
+    ngc1097: {
+      chip: 'NGC 1097', name: 'NGC 1097', sub: 'Barred spiral with a starburst ring at its heart · Fornax',
+      blurb: 'NGC 1097: a long bar with dust lanes running down it, a small bright ring of star formation around the nucleus, two sweeping arms, and the little companion NGC 1097A.',
+      parts: [disk({
+        seed: [6.6, 1.2, 15.5, 9.9], arm: [2, 1.7, 2.4, 1.0], arm2: [0.5, 0.7, 0.7, 0], bar: [0.36, 0.26, 0.85, 0.7],
+        ring1: [0.065, 0.016, 3.0, 0.3], dsk: [0.3, 1.0, 0.55, 0.8], amt: [1, 1, 1.1, 0.5],
+        b1: [0.06, 0.75, 2.6], b2: [0.01, 0.9, 20],
+        pop: { bulge: 0.12, old: 0.36, young: 0.47, hii: 0.03 },
+        sats: [{ pos: [0.42, 0.1, -0.5], a: 0.028, frac: 0.02, q: 0.8 }]
+      })],
+      tags: [{ t: 'NGC 1097A', p: [0.42, 0.1, -0.5] }],
+      el: 0.8, sway: 0.16, minH: 0.3
+    },
+    ngc1291: {
+      chip: 'NGC 1291', name: 'NGC 1291', sub: 'Barred ring galaxy · Eridanus · about 33 million light-years',
+      blurb: 'NGC 1291: an old, yellow barred centre with hardly any arms, set inside a wide, faint ring where younger blue stars are still forming.',
+      parts: [disk({
+        seed: [10.2, 6.1, 3.4, 12.8], arm: [2, 3.0, 2.0, 0.08], arm2: [0, 0.5, 0.3, 0], bar: [0.26, 0.36, 0.9, 0],
+        ring1: [0.82, 0.085, 0.55, 0.12], dsk: [0.1, 1.0, 0.6, 0.62], amt: [1, 0.5, 0.6, 0.5],
+        k: [30, 60, 13], oldR: 0.3,
+        b1: [0.11, 0.8, 2.6], b1c: [1.0, 0.82, 0.54],
+        pop: { bulge: 0.22, old: 0.5, young: 0.27, hii: 0.01 }, bulgeA: 0.07
+      })],
+      el: 1.05, sway: 0.14, minH: 0.3
+    },
+    ic342: {
+      chip: 'IC 342', name: 'IC 342', sub: 'The Hidden Galaxy · face-on spiral behind the Milky Way · Camelopardalis',
+      blurb: 'IC 342, the Hidden Galaxy: a sprawling face-on spiral with loose, branching arms crowded with pink nebulae. From Earth it lies behind the dust of our own Milky Way.',
+      parts: [disk({
+        seed: [4.4, 18.2, 11.1, 2.9], arm: [2, 1.9, 2.4, 1.0], arm2: [1.3, 1.5, 1.5, 0],
+        dsk: [0.1, 1.05, 0.6, 0.85], amt: [1.1, 1.5, 0.9, 0.55],
+        b1: [0.05, 0.8, 1.8], b2: [0.01, 0.9, 14],
+        pop: { bulge: 0.07, old: 0.34, young: 0.55, hii: 0.04 }, bulgeA: 0.035
+      })],
+      el: 1.2, sway: 0.12, minH: 0.3
+    },
+    ic3639: {
+      chip: 'IC 3639', name: 'IC 3639', sub: 'Barred spiral with a hidden active nucleus',
+      blurb: 'IC 3639: a compact barred spiral whose centre holds a supermassive black hole, feeding but hidden from view behind thick gas and dust.',
+      parts: [disk({
+        seed: [15.3, 7.9, 1.6, 21.4], arm: [2, 2.3, 2.6, 1.0], arm2: [0.8, 0.8, 0.8, 0], bar: [0.2, 0.34, 0.75, 0.45],
+        dsk: [0.12, 0.95, 0.5, 0.8], amt: [1, 0.8, 1, 0.5],
+        b1: [0.07, 0.7, 2.2], b2: [0.012, 0.9, 34], b2c: [1.0, 0.95, 0.88]
+      })],
+      el: 0.95, sway: 0.16, minH: 0.3
+    },
+    hoag: {
+      chip: 'Hoag’s Object', name: 'Hoag’s Object', sub: 'Ring galaxy · Serpens · about 600 million light-years',
+      blurb: 'Hoag’s Object: a round yellow core of old stars, a dark gap, and around it a nearly perfect ring of young blue stars.',
+      parts: [disk({
+        seed: [9.7, 13.3, 6.2, 1.1], arm: [2, 3.5, 1.5, 0], arm2: [0, 0.6, 0, 0],
+        ring1: [0.74, 0.095, 1.7, 0.12], dsk: [0.5, 1.0, 0.6, 0], amt: [1, 0.5, 1, 0.5],
+        k: [36, 50, 3], oldR: 0.2,
+        b1: [0.1, 0.95, 2.6], b1c: [1.0, 0.82, 0.5], b2: [0.02, 0.95, 6],
+        pop: { bulge: 0.3, old: 0.05, young: 0.63, hii: 0.02 }, bulgeA: 0.065, bulgeMax: 0.4
+      })],
+      el: 1.2, sway: 0.12, minH: 0.3
+    },
+    antennae: {
+      chip: 'Antennae', name: 'Antennae Galaxies', sub: 'NGC 4038 and NGC 4039 · two spirals merging · Corvus',
+      blurb: 'The Antennae: two spiral galaxies in the middle of merging. The collision has set off a storm of star formation and flung out two long tails of stars.',
+      parts: [
+        disk({ seed: [2.7, 16.9, 13.4, 5.5], arm: [2, 1.6, 1.6, 0.9], arm2: [1.2, 2.6, 1.6, 0.8], dsk: [0.06, 0.9, 0.5, 0.7], amt: [1.3, 2.2, 1.5, 0.4],
+          b1: [0.07, 0.7, 1.8], pop: { bulge: 0.1, old: 0.3, young: 0.54, hii: 0.06 },
+          pos: [-0.26, 0.16, 0.05], rot: [0.5, 0.3, 0.35], scale: 0.8, spinK: 0.25 }),
+        disk({ seed: [18.8, 4.6, 9.3, 14.7], arm: [2, 1.8, 1.6, 0.8], arm2: [1.0, 2.8, 1.6, 0.9], dsk: [0.06, 0.9, 0.5, 0.7], amt: [1.2, 2.0, 1.6, 0.4],
+          b1: [0.08, 0.7, 2.0], pop: { bulge: 0.12, old: 0.34, young: 0.49, hii: 0.05 },
+          pos: [0.36, -0.28, -0.1], rot: [-0.6, 1.2, -0.5], scale: 0.66, spinK: 0.25, phase: 2.1 })
+      ],
+      streams: [
+        tail({ a: [-0.7, 0.4, 0.1], b: [-1.6, 1.35, 0.3], g: [-2.2, 0.35, 0.8], n: 36000, bright: 0.06, size: 0.002 }),
+        tail({ a: [0.75, -0.5, -0.15], b: [1.5, -1.4, -0.2], g: [2.0, -0.45, -0.8], n: 30000, bright: 0.06, size: 0.002 })
+      ],
+      tags: [{ t: 'NGC 4038', p: [-0.26, 0.16, 0.05] }, { t: 'NGC 4039', p: [0.36, -0.28, -0.1] }],
+      el: 1.0, sway: 0.12, minH: 0.95, fit: 1.5
+    },
+    ngc2207: {
+      chip: 'NGC 2207 + IC 2163', name: 'NGC 2207 and IC 2163', sub: 'Two spirals in a grazing collision · Canis Major · about 114 million light-years',
+      blurb: 'NGC 2207 and IC 2163: two spirals brushing past each other. The pull of the larger one has drawn IC 2163 into the shape of an eye and stretched out a long arm of stars.',
+      parts: [
+        disk({ seed: [7.2, 10.5, 16.1, 3.8], arm: [2, 2.2, 2.6, 1.0], arm2: [1.1, 1.1, 1.0, 0], pos: [-0.5, 0, 0], rot: [0.25, 0, 0.1] }),
+        disk({ seed: [13.9, 2.1, 5.7, 11.6], arm: [2, 1.5, 4.0, 1.4], arm2: [0.2, 0.5, 0.4, 0], bar: [0.3, 0.55, 0.5, 0], dsk: [0.1, 0.8, 0.45, 0.7],
+          b1: [0.07, 0.7, 2.2], pos: [0.66, -0.06, 0.12], rot: [-0.35, 0.8, 0.3], scale: 0.58, phase: 1.4 })
+      ],
+      streams: [tail({ a: [1.1, 0, 0.25], b: [1.7, 0.15, 0.75], g: [2.2, 0.3, 0.3], n: 20000, wa: [0.07, 0.05, 0.07], bright: 0.06, size: 0.002 })],
+      tags: [{ t: 'NGC 2207', p: [-0.5, 0, 0] }, { t: 'IC 2163', p: [0.66, -0.06, 0.12] }],
+      el: 0.95, sway: 0.12, minH: 0.85, fit: 1.4
+    },
+    laniakea: {
+      kind: 'web',
+      chip: 'Laniakea', name: 'Laniakea', sub: 'Our home supercluster · about 100,000 galaxies · 500 million light-years across',
+      blurb: 'Laniakea, our home supercluster: about 100,000 galaxies streaming towards the Great Attractor, with the Milky Way near the edge. Each point is a galaxy. The layout is a schematic, not a survey map.',
+      k: [0, 0, 0], oldR: 0.3, dustK: 0, dustH: 1,
+      b1: [0.10, 0.8, 0.30], b1c: [1.0, 0.74, 0.46], b2: [0.02, 0.9, 0], b2c: [1, 1, 1], b3: [0.4, 0.8, 0.03], b3c: [1.0, 0.8, 0.6],
+      tags: [{ t: 'Milky Way', p: WEB_MW_POS }, { t: 'Great Attractor', p: [0, 0, 0] }],
+      el: 0.42, sway: 0.12, minH: 0.5
+    }
+  };
+  const ORDER = Object.keys(GALAXIES);
+
+  const SKY_ENC = HDR ? 1 : 20;
+  const skyRT = mkRT(1024, 512, { wrapS: THREE.RepeatWrapping });
+  blit(new THREE.ShaderMaterial(Object.assign({ uniforms: { uEnc: { value: SKY_ENC } }, vertexShader: FS_VERT, fragmentShader: SKY_FRAG }, plain)), skyRT);
+
+  const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 400);
+  // Uniforms every galaxy on stage shares.
+  const U = {
+    uCam: { value: new THREE.Vector3() },
+    uFlow: { value: new THREE.Vector4() }, uFlowA: { value: 0.007 },
+    uWarp: { value: new THREE.Vector2() }, uShear: { value: new THREE.Vector2(0.5, 0.22) }, uBreath: { value: 1 }, uTime: { value: 0 },
+    uGain: { value: GAIN }, uPulse: { value: 0 },
+    uDiff: { value: 0 }, uBob: { value: 0 }, uPixel: { value: 1000 }, uMinPx: { value: 2 }, uSpark: { value: 0.25 }
+  };
+  // The lean the music gives the whole scene. Everything about a galaxy is drawn in its own frame.
+  const tiltQ = new THREE.Quaternion(), tiltQi = new THREE.Quaternion(), tiltE = new THREE.Euler();
+  const camG = new THREE.Matrix4(), skyRot = new THREE.Matrix3(), m4 = new THREE.Matrix4();
+  const qA = new THREE.Quaternion(), qAi = new THREE.Quaternion();
+
+  const sceneRT = mkRT(4, 4), volRT = mkRT(4, 4);
+  const volMat = new THREE.ShaderMaterial(Object.assign({
+    uniforms: {
+      uMap: { value: null }, uSky: { value: skyRT.texture }, uSkyRot: { value: skyRot }, uCam: { value: new THREE.Vector3() },
+      uP: { value: new THREE.Vector3(0.6, 0.6, 0.6) }, uFlow: U.uFlow, uFlowA: U.uFlowA, uWarp: U.uWarp, uShear: U.uShear, uBreath: U.uBreath, uGain: U.uGain, uPulse: U.uPulse,
+      uInvProj: { value: camera.projectionMatrixInverse }, uCamWorld: { value: camG },
+      uH: { value: 0.072 }, uFrame: { value: 0 }, uPix: { value: 0.001 }, uTexels: { value: Q.bake/(2*TEXS) },
+      uCore: { value: 0 }, uMood: { value: 0.25 }, uSkyK: { value: GAIN/SKY_ENC }, uSteps: { value: Q.steps }, uDither: { value: HDR ? 0 : 1.5/255 },
+      uDisk: { value: 1 }, uDustK: { value: 1 }, uDustH: { value: 1 }, uK: { value: new THREE.Vector3(38, 90, 11.5) }, uOldR: { value: 0.27 },
+      uB1: { value: new THREE.Vector3() }, uB2: { value: new THREE.Vector3() }, uB3: { value: new THREE.Vector3() },
+      uB1c: { value: new THREE.Vector3() }, uB2c: { value: new THREE.Vector3() }, uB3c: { value: new THREE.Vector3() }
+    },
+    vertexShader: VOL_VERT, fragmentShader: VOL_FRAG
+  }, plain));
+  // Point the gas-and-dust pass at one galaxy (or, with no slot, at the supercluster's bare glow).
+  function setVol(p, camv, camW, sky, slot, first) {
+    const u = volMat.uniforms;
+    u.uCam.value.copy(camv); u.uCamWorld.value = camW; u.uSkyRot.value = sky;
+    u.uSkyK.value = first ? GAIN/SKY_ENC : 0;                  // the sky glow is laid down once, behind everything
+    u.uK.value.fromArray(p.k); u.uOldR.value = p.oldR; u.uDustK.value = p.dustK; u.uDustH.value = p.dustH;
+    u.uB1.value.fromArray(p.b1); u.uB2.value.fromArray(p.b2); u.uB3.value.fromArray(p.b3);
+    u.uB1c.value.fromArray(p.b1c); u.uB2c.value.fromArray(p.b2c); u.uB3c.value.fromArray(p.b3c);
+    u.uDisk.value = slot ? 1 : 0;
+    if (slot) { u.uMap.value = slot.map.texture; u.uTexels.value = slot.size/(2*TEXS); u.uP.value.copy(slot.u.uP.value); }
+  }
+  const compMat = new THREE.ShaderMaterial({
+    uniforms: { tVol: { value: volRT.texture } }, vertexShader: FS_VERT, fragmentShader: COMP_FRAG,
+    depthTest: false, depthWrite: false, transparent: true,
+    blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.SrcAlphaFactor
+  });
+
+  /* ------------------------------------------------------------------
+     Stars
+  ------------------------------------------------------------------ */
+  function prng(a) {
+    return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0)/4294967296; };
+  }
+
+  const galScene = new THREE.Scene();
+  // Up to two galaxies are on stage at once. Each slot holds one: its painted map, its stars, its place.
+  const SLOTS = [];
+  function makeSlot(i) {
+    const n = i === 0 ? Q.stars : Math.round(Q.stars*0.6), size = i === 0 ? Q.bake : Math.min(Q.bake, 1024);
+    const s = {
+      n, size, part: null, dist: 0,
+      map: new THREE.WebGLRenderTarget(size, size, {
+        type: THREE.UnsignedByteType, format: THREE.RGBAFormat,
+        minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter,
+        generateMipmaps: true, depthBuffer: false, stencilBuffer: false
+      }),
+      pos: new Float32Array(n*3), col: new Float32Array(n*3), misc: new Float32Array(n*4),
+      geo: new THREE.BufferGeometry(), group: new THREE.Group(),
+      camW: new THREE.Matrix4(), sky: new THREE.Matrix3(),
+      u: { uMap: { value: null }, uCam: { value: new THREE.Vector3() }, uP: { value: new THREE.Vector3() }, uDustK: { value: 1 }, uDustH: { value: 1 }, uScale: { value: 1 } }
+    };
+    s.u.uMap.value = s.map.texture;
+    s.mat = new THREE.ShaderMaterial(Object.assign({
+      uniforms: {
+        uMap: s.u.uMap, uCam: s.u.uCam, uP: s.u.uP, uDustK: s.u.uDustK, uDustH: s.u.uDustH, uScale: s.u.uScale,
+        uFlow: U.uFlow, uFlowA: U.uFlowA, uWarp: U.uWarp, uShear: U.uShear, uBreath: U.uBreath, uTime: U.uTime, uGain: U.uGain, uPulse: U.uPulse,
+        uDiff: U.uDiff, uBob: U.uBob, uPixel: U.uPixel, uMinPx: U.uMinPx, uSpark: U.uSpark, uPuff: { value: 0.5 }
+      },
+      vertexShader: STAR_VERT, fragmentShader: STAR_FRAG
+    }, additive));
+    s.geo.setAttribute('position', new THREE.BufferAttribute(s.pos, 3));
+    s.geo.setAttribute('aCol', new THREE.BufferAttribute(s.col, 3));
+    s.geo.setAttribute('aMisc', new THREE.BufferAttribute(s.misc, 4));
+    const pts = new THREE.Points(s.geo, s.mat);
+    pts.frustumCulled = false;
+    s.group.add(pts);
+    s.group.visible = false;
+    galScene.add(s.group);
+    return s;
+  }
+  // Scatter one galaxy's stars. Where each population lives is read from that galaxy's painted map.
+  function buildStars(G, slot) {
+    const N = slot.n, S = SM, n = S*S, rnd = prng(20261110);
+    const starPos = slot.pos, starCol = slot.col, starMisc = slot.misc;
+    const gauss = () => { let u = 0; while (u === 0) u = rnd(); return Math.sqrt(-2*Math.log(u))*Math.cos(TAU*rnd()); };
+    const cY = new Float64Array(n), cO = new Float64Array(n), cH = new Float64Array(n);
+    let aY = 0, aO = 0, aH = 0;
+    for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+      const k = j*S + i, x = ((i + 0.5)/S - 0.5)*2*TEXS, z = ((j + 0.5)/S - 0.5)*2*TEXS, r = Math.hypot(x, z);
+      const y = mapPx[k*4]/255, h = mapPx[k*4 + 2]/255;
+      aY += y*y; cY[k] = aY;
+      aO += mapPx[k*4 + 1]/255*Math.exp(-r/G.oldR); cO[k] = aO;
+      aH += h*h; cH[k] = aH;
+    }
+    const pick = (cdf, tot) => {
+      const u = rnd()*tot;
+      let lo = 0, hi = n - 1;
+      while (lo < hi) { const m = (lo + hi) >> 1; if (cdf[m] < u) lo = m + 1; else hi = m; }
+      return lo;
+    };
+    const mix3 = (a, b, t) => [a[0] + (b[0] - a[0])*t, a[1] + (b[1] - a[1])*t, a[2] + (b[2] - a[2])*t];
+    const ballR = (a0, cap, min) => { let rr; do { rr = a0/Math.sqrt(Math.pow(rnd()*0.985 + 0.01, -2/3) - 1); } while (rr > cap || rr < min); return rr; };
+    const P = G.pop, tB = P.bulge, tO = tB + P.old, tY = tO + P.young, tH = tY + P.hii;
+    for (let i = 0; i < N; i++) {
+      const u = i/N, lum = Math.pow(rnd(), 7);
+      let x, y, z, c, br, size, drift, resp;
+      if (u < tB) {                         // the bulge
+        const rr = ballR(G.bulgeA, G.bulgeMax, 0), a = rnd()*TAU, cz = 2*rnd() - 1, sz = Math.sqrt(1 - cz*cz);
+        x = rr*sz*Math.cos(a); z = rr*sz*Math.sin(a); y = rr*cz*0.7;
+        c = mix3([1.0, 0.86, 0.62], [1.0, 0.68, 0.40], rnd()); br = 0.07*(0.3 + 5*lum); size = 0.0017*(1 + 1.6*lum); drift = 1; resp = 0.15;
+      } else if (u < tH) {
+        let cdf, tot;
+        if (u < tO) { cdf = cO; tot = aO; } else if (u < tY) { cdf = cY; tot = aY; } else { cdf = cH; tot = aH; }
+        const k = pick(cdf, tot);
+        x = ((k % S + rnd())/S - 0.5)*2*TEXS; z = ((Math.floor(k/S) + rnd())/S - 0.5)*2*TEXS;
+        if (u < tO) {                       // old disk
+          y = gauss()*0.022;
+          c = mix3([1.0, 0.90, 0.74], [1.0, 0.70, 0.44], rnd());
+          br = 0.032*(0.3 + 8*lum); size = 0.0016*(1 + 1.8*lum); drift = 1; resp = 0.35;
+        } else if (u < tY) {                // young stars in the arms
+          y = gauss()*0.008;
+          c = rnd() < 0.04 ? [1.0, 0.52, 0.28] : mix3([0.42, 0.60, 1.0], [0.82, 0.89, 1.0], rnd());
+          br = 0.05*(0.3 + 12*lum); size = 0.0016*(1 + 2.4*lum); drift = 0; resp = 1.0;
+        } else {                            // star-forming knots
+          y = gauss()*0.006;
+          c = rnd() < 0.5 ? [1.0, 0.34, 0.50] : [0.58, 0.74, 1.0];
+          br = 0.22*(0.5 + 5*lum); size = 0.0026*(1 + 1.8*lum); drift = 0; resp = 1.5;
+        }
+      } else {
+        // past the last population: a small satellite galaxy if this one has any, otherwise globular clusters in the halo
+        let sat = null, acc = tH;
+        for (const q of G.sats) { if (u < acc + q.frac) { sat = q; break; } acc += q.frac; }
+        const a = rnd()*TAU, cz = 2*rnd() - 1, sz = Math.sqrt(1 - cz*cz);
+        if (sat) {
+          const rr = ballR(sat.a, sat.a*7, 0);
+          x = sat.pos[0] + rr*sz*Math.cos(a); z = sat.pos[2] + rr*sz*Math.sin(a); y = sat.pos[1] + rr*cz*(sat.q || 0.8);
+          c = mix3([1.0, 0.88, 0.66], [1.0, 0.74, 0.48], rnd()); br = 0.085*(0.3 + 5*lum); size = 0.0017*(1 + 1.6*lum); drift = 2; resp = 0.1;
+        } else {
+          const rr = ballR(0.45, 1.7, 0.12);
+          x = rr*sz*Math.cos(a); z = rr*sz*Math.sin(a); y = rr*cz*0.85;
+          c = [1.0, 0.90, 0.72]; br = 0.2*(0.5 + 2*lum); size = 0.0030*(1 + lum); drift = 1; resp = 0.1;
+        }
+      }
+      starPos[i*3] = x; starPos[i*3 + 1] = y; starPos[i*3 + 2] = z;
+      starCol[i*3] = c[0]*br; starCol[i*3 + 1] = c[1]*br; starCol[i*3 + 2] = c[2]*br;
+      starMisc[i*4] = size; starMisc[i*4 + 1] = rnd(); starMisc[i*4 + 2] = drift; starMisc[i*4 + 3] = resp;
+    }
+    slot.geo.attributes.position.needsUpdate = true;
+    slot.geo.attributes.aCol.needsUpdate = true;
+    slot.geo.attributes.aMisc.needsUpdate = true;
+  }
+
+  /* ------------------------------------------------------------------
+     Laniakea. A supercluster is defined by how its galaxies move: inside
+     the boundary they all stream towards one valley, the Great Attractor,
+     the way water drains into one basin. This builds that picture as a
+     schematic: filaments that merge into a few trunks and meet at the
+     attractor, galaxy clusters along them, the Milky Way near the edge,
+     and neighbouring basins outside whose galaxies flow the other way.
+  ------------------------------------------------------------------ */
+  U.uWebT = { value: 0 };
+  const webMat = new THREE.ShaderMaterial(Object.assign({
+    uniforms: { uT: U.uWebT, uPixel: { value: 1000 }, uMinPx: { value: 2 }, uGain: U.uGain, uPulse: U.uPulse, uTime: U.uTime },
+    vertexShader: WEB_VERT, fragmentShader: WEB_FRAG
+  }, additive));
+  const webLineMat = new THREE.ShaderMaterial(Object.assign({
+    uniforms: { uT: U.uWebT, uGain: U.uGain, uPulse: U.uPulse, uDpr: { value: 1 } },
+    vertexShader: WEBLINE_VERT, fragmentShader: WEBLINE_FRAG
+  }, additive));
+  let web = null;
+  function buildLaniakea() {
+    const rnd = prng(20140903);                       // the day the paper defining Laniakea appeared
+    const g = () => { let u = 0; while (u === 0) u = rnd(); return Math.sqrt(-2*Math.log(u))*Math.cos(TAU*rnd()); };
+    const ball = () => { for (;;) { const x = 2*rnd() - 1, y = 2*rnd() - 1, z = 2*rnd() - 1; if (x*x + y*y + z*z <= 1) return [x, y, z]; } };
+    const len = v => Math.hypot(v[0], v[1], v[2]);
+    const unit = v => { const l = len(v) || 1; return [v[0]/l, v[1]/l, v[2]/l]; };
+    const N = mobile ? 60000 : 100000;                // on a computer, one point for each of its galaxies
+    const SC = [1.0, 0.34, 0.76];                     // the basin is wider than it is tall
+    const trunks = [[-0.95, 0.05, 0.3], [0.35, 0.12, -0.93], [0.85, -0.08, 0.52], [-0.25, 0.3, 0.92], [-0.55, -0.3, -0.78]].map(unit);
+    // Each filament runs from an outer end A, past a control point B that swings it onto the nearest
+    // trunk, to the attractor at the origin. Filaments sharing a trunk merge as they close in.
+    const control = A => {
+      const d = unit(A); let best = 0, bd = -2;
+      trunks.forEach((t, i) => { const q = d[0]*t[0] + d[1]*t[1] + d[2]*t[2]; if (q > bd) { bd = q; best = i; } });
+      const t = trunks[best], l = len(A)*(0.52 + 0.24*rnd());
+      return [t[0]*l + 0.06*g(), t[1]*l + 0.04*g(), t[2]*l + 0.06*g()];
+    };
+    const at = (A, B, G, s) => { const u = 1 - s; return [u*u*A[0] + 2*u*s*B[0] + s*s*G[0], u*u*A[1] + 2*u*s*B[1] + s*s*G[1], u*u*A[2] + 2*u*s*B[2] + s*s*G[2]]; };
+    const O = [0, 0, 0], MW = WEB_MW_POS;
+    const fil = [{ A: MW, B: control(MW), w: 0.06, wt: 1.3 }];      // the strand the Milky Way sits on
+    for (let i = 0; i < 30; i++) {
+      const d = unit([g(), g(), g()]), r = 0.58 + 0.5*rnd();
+      const A = [d[0]*SC[0]*r, d[1]*SC[1]*r, d[2]*SC[2]*r];
+      fil.push({ A, B: control(A), w: 0.045 + 0.07*rnd(), wt: 0.4 + rnd() });
+    }
+    let wsum = 0; fil.forEach(f => { wsum += f.wt; f.c = wsum; });
+    const pickFil = () => { const u = rnd()*wsum; return fil.find(f => f.c >= u) || fil[0]; };
+    // rich clusters: near where trunks meet the centre, one beside the Milky Way, and a few along filaments
+    const knots = [];
+    trunks.forEach(t => { knots.push({ c: [t[0]*0.15, t[1]*0.15, t[2]*0.15], r: 0.03 }); knots.push({ c: [t[0]*0.33, t[1]*0.33, t[2]*0.33], r: 0.035 }); });
+    knots.push({ c: at(fil[0].A, fil[0].B, O, 0.2), r: 0.03 });
+    for (let i = 0; i < 9; i++) { const f = fil[1 + Math.floor(rnd()*30)]; knots.push({ c: at(f.A, f.B, O, 0.25 + 0.4*rnd()), r: 0.02 + 0.025*rnd() }); }
+    // neighbouring basins, each with its own attractor
+    const NB = [[2.05, 0.25, -0.9], [-1.9, -0.15, 1.15], [-1.25, 0.5, -1.75], [1.0, -0.45, 1.95]];
+
+    const pos = new Float32Array(N*3), cB = new Float32Array(N*3), cG = new Float32Array(N*3), misc = new Float32Array(N*4), tint = new Float32Array(N*3);
+    for (let i = 0; i < N; i++) {
+      const u = i/N;
+      let A, B, G = O, speed = 0.6 + 0.8*rnd(), dim = 1, c;
+      if (i === 0) { A = MW; B = MW; speed = 0; }
+      else if (u < 0.60) {
+        const f = pickFil(), d = unit(f.A), k = 1.5*g()*f.w;
+        A = [f.A[0] + g()*f.w + d[0]*k, f.A[1] + g()*f.w*0.7 + d[1]*k, f.A[2] + g()*f.w + d[2]*k];
+        B = [f.B[0] + 0.025*g(), f.B[1] + 0.02*g(), f.B[2] + 0.025*g()];
+      } else if (u < 0.70) {
+        const d = ball(), r = 0.3 + 0.78*Math.cbrt(rnd());
+        A = [d[0]*SC[0]*r, d[1]*SC[1]*r, d[2]*SC[2]*r];
+        B = control(A); dim = 0.7;
+      } else if (u < 0.87) {
+        const kn = knots[Math.floor(rnd()*knots.length)];
+        A = [kn.c[0] + g()*kn.r, kn.c[1] + g()*kn.r, kn.c[2] + g()*kn.r];
+        B = A; speed = 0;
+      } else {
+        G = NB[i % NB.length];
+        const d = ball();
+        A = [G[0] + d[0]*0.85, G[1] + d[1]*0.6, G[2] + d[2]*0.85];
+        B = [(A[0] + G[0])/2 + 0.12*g(), (A[1] + G[1])/2 + 0.08*g(), (A[2] + G[2])/2 + 0.12*g()];
+        dim = 0.5;
+      }
+      const t = rnd();
+      if (G !== O) c = [0.5, 0.64, 1.0];
+      else c = t < 0.55 ? [1.0, 0.84, 0.62] : t < 0.9 ? [0.72, 0.83, 1.0] : [1.0, 0.97, 0.92];
+      const big = Math.pow(rnd(), 5);
+      pos.set(A, i*3); cB.set(B, i*3); cG.set(G, i*3); tint.set(c, i*3);
+      misc[i*4] = rnd(); misc[i*4 + 1] = 0.0022*(0.8 + 2.8*big); misc[i*4 + 2] = 0.075*dim*(0.4 + 8*big); misc[i*4 + 3] = speed;
+    }
+    misc[1] = 0.011; misc[2] = 2.4; tint.set([0.72, 0.86, 1.0], 0);   // the Milky Way, marked a little brighter
+
+    const lp = [], la = [], lc = [];
+    const HOME = [1.0, 0.93, 0.82], AWAY = [0.42, 0.58, 0.95], RIM = [1.0, 0.48, 0.12];
+    const line = (A, B, G, kind, w, c) => {
+      const n = 44, seed = rnd();
+      for (let j = 0; j < n; j++) {
+        const s0 = j/n, s1 = (j + 1)/n, a = at(A, B, G, s0), b = at(A, B, G, s1);
+        lp.push(a[0], a[1], a[2], b[0], b[1], b[2]);
+        la.push(s0, seed, kind, w, s1, seed, kind, w);
+        lc.push(c[0], c[1], c[2], c[0], c[1], c[2]);
+      }
+    };
+    fil.forEach(f => {
+      const m = 2 + Math.floor(2.5*f.wt);
+      for (let j = 0; j < m; j++) {
+        line([f.A[0] + g()*f.w*0.9, f.A[1] + g()*f.w*0.6, f.A[2] + g()*f.w*0.9], [f.B[0] + 0.025*g(), f.B[1] + 0.02*g(), f.B[2] + 0.025*g()], O, 0, 0.55 + 0.6*rnd(), HOME);
+      }
+    });
+    NB.forEach(G => {
+      for (let j = 0; j < 12; j++) {
+        const d = ball(), A = [G[0] + d[0]*0.85, G[1] + d[1]*0.6, G[2] + d[2]*0.85];
+        line(A, [(A[0] + G[0])/2 + 0.12*g(), (A[1] + G[1])/2 + 0.08*g(), (A[2] + G[2])/2 + 0.12*g()], G, 0, 0.5, AWAY);
+      }
+    });
+    // the watershed: an orange outline of the basin where it crosses the mid-plane
+    const edge = th => { const r = 1 + 0.07*Math.sin(5*th + 1) + 0.05*Math.sin(9*th + 2); return [1.0*r*Math.cos(th), 0.05*Math.sin(3*th + 0.5), 0.8*r*Math.sin(th)]; };
+    for (let j = 0; j < 240; j++) {
+      const a = edge(j/240*TAU), b = edge((j + 1)/240*TAU);
+      lp.push(a[0], a[1], a[2], b[0], b[1], b[2]);
+      la.push(0.5, 0, 2, 1, 0.5, 0, 2, 1);
+      lc.push(RIM[0], RIM[1], RIM[2], RIM[0], RIM[1], RIM[2]);
+    }
+
+    const pg = new THREE.BufferGeometry();
+    pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    pg.setAttribute('aB', new THREE.BufferAttribute(cB, 3));
+    pg.setAttribute('aG', new THREE.BufferAttribute(cG, 3));
+    pg.setAttribute('aTint', new THREE.BufferAttribute(tint, 3));
+    pg.setAttribute('aMisc', new THREE.BufferAttribute(misc, 4));
+    const lg = new THREE.BufferGeometry();
+    lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(lp), 3));
+    lg.setAttribute('aL', new THREE.BufferAttribute(new Float32Array(la), 4));
+    lg.setAttribute('aC', new THREE.BufferAttribute(new Float32Array(lc), 3));
+    const group = new THREE.Group();
+    const lines = new THREE.LineSegments(lg, webLineMat), points = new THREE.Points(pg, webMat);
+    lines.frustumCulled = points.frustumCulled = false;
+    group.add(lines); group.add(points);
+    galScene.add(group);
+    return group;
+  }
+
+  // Streams beside a galaxy, drawn the same way: the tidal tails of a merger, or gas blown out of a starburst.
+  // Each runs from a to g past the control point b, with its points flowing along it.
+  function buildStreams(list, group) {
+    const rnd = prng(424242);
+    const g = () => { let u = 0; while (u === 0) u = rnd(); return Math.sqrt(-2*Math.log(u))*Math.cos(TAU*rnd()); };
+    const jit = (c, w, k) => [c[0] + g()*w[0]*k, c[1] + g()*w[1]*k, c[2] + g()*w[2]*k];
+    const counts = list.map(st => Math.round(st.n*(mobile ? 0.6 : 1)));
+    const N = counts.reduce((a, b) => a + b, 0);
+    const pos = new Float32Array(N*3), cB = new Float32Array(N*3), cG = new Float32Array(N*3), misc = new Float32Array(N*4), tint = new Float32Array(N*3);
+    const lp = [], la = [], lc = [];
+    let i = 0;
+    list.forEach((st, si) => {
+      for (let j = 0; j < counts[si]; j++, i++) {
+        const big = Math.pow(rnd(), 5), v = 0.8 + 0.4*rnd();
+        pos.set(jit(st.a, st.wa, 1), i*3); cB.set(jit(st.b, st.wb, 1), i*3); cG.set(jit(st.g, st.wg, 1), i*3);
+        tint.set([st.tint[0]*v, st.tint[1]*v, st.tint[2]*v], i*3);
+        misc[i*4] = rnd(); misc[i*4 + 1] = st.size*(0.8 + 2.4*big); misc[i*4 + 2] = st.bright*(0.4 + 6*big); misc[i*4 + 3] = st.speed*(0.6 + 0.8*rnd());
+      }
+      for (let j = 0; j < st.lines; j++) {
+        const A = jit(st.a, st.wa, 0.9), B = jit(st.b, st.wb, 0.9), G = jit(st.g, st.wg, 0.9), seed = rnd(), w = (st.lineK || 1)*(0.5 + 0.6*rnd());
+        for (let q = 0; q < 36; q++) {
+          const s0 = q/36, s1 = (q + 1)/36, u0 = 1 - s0, u1 = 1 - s1;
+          for (let d = 0; d < 3; d++) lp.push(u0*u0*A[d] + 2*u0*s0*B[d] + s0*s0*G[d]);
+          for (let d = 0; d < 3; d++) lp.push(u1*u1*A[d] + 2*u1*s1*B[d] + s1*s1*G[d]);
+          la.push(s0, seed, 0, w, s1, seed, 0, w);
+          lc.push(st.tint[0], st.tint[1], st.tint[2], st.tint[0], st.tint[1], st.tint[2]);
+        }
+      }
+    });
+    const pg = new THREE.BufferGeometry();
+    pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    pg.setAttribute('aB', new THREE.BufferAttribute(cB, 3));
+    pg.setAttribute('aG', new THREE.BufferAttribute(cG, 3));
+    pg.setAttribute('aTint', new THREE.BufferAttribute(tint, 3));
+    pg.setAttribute('aMisc', new THREE.BufferAttribute(misc, 4));
+    const points = new THREE.Points(pg, webMat);
+    points.frustumCulled = false;
+    group.add(points);
+    if (lp.length) {
+      const lg = new THREE.BufferGeometry();
+      lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(lp), 3));
+      lg.setAttribute('aL', new THREE.BufferAttribute(new Float32Array(la), 4));
+      lg.setAttribute('aC', new THREE.BufferAttribute(new Float32Array(lc), 3));
+      const lines = new THREE.LineSegments(lg, webLineMat);
+      lines.frustumCulled = false;
+      group.add(lines);
+    }
+  }
+
+  const fieldMat = new THREE.ShaderMaterial(Object.assign({
+    uniforms: { uDpr: { value: 1 }, uTime: U.uTime, uGain: U.uGain },
+    vertexShader: FIELD_VERT, fragmentShader: FIELD_FRAG
+  }, additive));
+  const bgScene = new THREE.Scene();
+  const fieldPts = (() => {
+    const n = mobile ? 22000 : 34000, bright = 110, rnd = prng(99);
+    const pos = new Float32Array(n*3), s = new Float32Array(n*4);
+    for (let i = 0; i < n; i++) {
+      const a = rnd()*TAU, cz = 2*rnd() - 1, sz = Math.sqrt(1 - cz*cz);
+      pos[i*3] = 60*sz*Math.cos(a); pos[i*3 + 1] = 60*cz; pos[i*3 + 2] = 60*sz*Math.sin(a);
+      const u = rnd();
+      if (i < bright) { const b = Math.pow(rnd(), 2.5); s[i*4] = 18 + 40*b; s[i*4 + 3] = 2 + 6*b; }
+      else { s[i*4] = 1.4 + 1.8*u*u*u; s[i*4 + 3] = Math.min(3.0, 0.016/Math.pow(rnd() + 0.008, 1.15)); }
+      s[i*4 + 1] = rnd(); s[i*4 + 2] = rnd();
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('aS', new THREE.BufferAttribute(s, 4));
+    const pts = new THREE.Points(geo, fieldMat);
+    pts.frustumCulled = false;
+    bgScene.add(pts);
+    return pts;
+  })();
+
+  /* ------------------------------------------------------------------
+     Glow and grade
+  ------------------------------------------------------------------ */
+  const BL = 6, down = [], up = [], downMat = [], upMat = [];
+  for (let i = 0; i < BL; i++) {
+    down.push(mkRT(2, 2)); up.push(mkRT(2, 2));
+    downMat.push(new THREE.ShaderMaterial(Object.assign({
+      uniforms: { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uThr: { value: 0.3*GAIN }, uMax: { value: 24*GAIN } },
+      vertexShader: FS_VERT, fragmentShader: i === 0 ? PRE_FRAG : DOWN_FRAG
+    }, plain)));
+    upMat.push(new THREE.ShaderMaterial(Object.assign({
+      uniforms: { tSrc: { value: null }, tAdd: { value: null }, uTexel: { value: new THREE.Vector2() }, uMix: { value: 0.62 } },
+      vertexShader: FS_VERT, fragmentShader: UP_FRAG
+    }, plain)));
+  }
+  const finalMat = new THREE.ShaderMaterial(Object.assign({
+    uniforms: { tScene: { value: sceneRT.texture }, tBloom: { value: up[0].texture }, uExposure: { value: 1/GAIN }, uBloom: { value: 0.55 }, uTime: U.uTime, uAspect: { value: 1 } },
+    vertexShader: FS_VERT, fragmentShader: FINAL_FRAG
+  }, plain));
+
+  /* ------------------------------------------------------------------
+     How the music moves the galaxy: like a liquid, never in steps.
+     Notes (or onsets in a recording) feed slow envelopes and soft springs.
+     The centre answers first and the rest of the disk trails after it, so
+     a surge in the music stirs the middle and the arms wind and flow behind.
+  ------------------------------------------------------------------ */
+  const M = {
+    bass: 0, mid: 0, high: 0, act: 0, level: 0, levelT: 0, slow: 0.3,
+    eRaw: 0, eS: 0,                          // every note, smoothed into a slow swell
+    bRaw: 0, bS: 0,                          // bass notes, smoothed into a slow surge
+    sB: { x: 0, v: 0 },                      // the disk's swell
+    tx: { x: 0, v: 0 }, tz: { x: 0, v: 0 },  // how far the centre has tipped, about two axes
+    ox: 0, oz: 0,                            // the rim follows the centre's tip a little later
+    nod: 0, mood: 0.25, moodT: 0.25, last: 60, flip: 1
+  };
+  const HZ = 120, hStep = 1/HZ;
+  let hAcc = 0;
+  const WB = TAU*0.55, ZB = 0.6, WT = TAU*0.32, ZT = 0.6;
+  const dB = Math.exp(-hStep*2.6), dM = Math.exp(-hStep*4), dHi = Math.exp(-hStep*7), dA = Math.exp(-hStep/1.4);
+  const dE = Math.exp(-hStep/0.45), dBR = Math.exp(-hStep/0.8);
+  const aE = 1 - Math.exp(-hStep/0.12), aB = 1 - Math.exp(-hStep/0.16), aO = 1 - Math.exp(-hStep/0.7);
+  function spring(s, w, z) { s.v += (-w*w*s.x - 2*z*w*s.v)*hStep; s.x += s.v*hStep; }
+  function tick() {
+    M.bass *= dB; M.mid *= dM; M.high *= dHi; M.act *= dA; M.eRaw *= dE; M.bRaw *= dBR;
+    M.eS += (M.eRaw - M.eS)*aE; M.bS += (M.bRaw - M.bS)*aB;
+    spring(M.sB, WB, ZB); spring(M.tx, WT, ZT); spring(M.tz, WT, ZT);
+    M.ox += (M.tx.x - M.ox)*aO; M.oz += (M.tz.x - M.oz)*aO;
+  }
+  // voice 0 = bass, 1 = middle, 2 = treble; dir is the melodic direction for treble notes
+  function hit(voice, v, dir) {
+    const c = Math.cos(M.nod), s = Math.sin(M.nod);
+    if (voice === 0) {
+      // a bass note leans the disk over, each time towards a new side, and swells it
+      M.nod += 1.1;
+      M.tx.v += 0.7*v*Math.cos(M.nod); M.tz.v += 0.7*v*Math.sin(M.nod);
+      M.bass = Math.min(1.5, M.bass + 1.5*v); M.sB.v += 8.4*v; M.bRaw = Math.min(1.6, M.bRaw + v); M.eRaw += 0.4*v;
+    } else if (voice === 1) {
+      M.tx.v -= 0.15*v*c; M.tz.v -= 0.15*v*s;
+      M.mid = Math.min(1.3, M.mid + 0.9*v); M.sB.v -= 2.5*v; M.eRaw += 0.5*v;
+    } else {
+      // upper notes ease it across that lean, one way as the melody climbs and back as it falls
+      M.tx.v -= dir*0.12*v*s; M.tz.v += dir*0.12*v*c;
+      M.high = Math.min(1.3, M.high + 0.7*v); M.eRaw += 0.4*v;
+    }
+    M.eRaw = Math.min(M.eRaw, 2);
+  }
+
+  /* ------------------------------------------------------------------
+     The score: J. S. Bach, Prelude in C major, BWV 846.
+     Bars 1-32 are five-note chords played as 1 2 3 4 5 3 4 5, twice.
+  ------------------------------------------------------------------ */
+  const SEMI = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  const midi = s => {
+    const k = /^([A-G])([#b]?)(\d)$/.exec(s);
+    return 12*(+k[3] + 1) + SEMI[k[1]] + (k[2] === '#' ? 1 : k[2] === 'b' ? -1 : 0);
+  };
+  const BARS = [
+    'C4 E4 G4 C5 E5', 'C4 D4 A4 D5 F5', 'B3 D4 G4 D5 F5', 'C4 E4 G4 C5 E5',
+    'C4 E4 A4 E5 A5', 'C4 D4 F#4 A4 D5', 'B3 D4 G4 D5 G5', 'B3 C4 E4 G4 C5',
+    'A3 C4 E4 G4 C5', 'D3 A3 D4 F#4 C5', 'G3 B3 D4 G4 B4', 'G3 Bb3 E4 G4 C#5',
+    'F3 A3 D4 A4 D5', 'F3 Ab3 D4 F4 B4', 'E3 G3 C4 G4 C5', 'E3 F3 A3 C4 F4',
+    'D3 F3 A3 C4 F4', 'G2 D3 G3 B3 F4', 'C3 E3 G3 C4 E4', 'C3 G3 Bb3 C4 E4',
+    'F2 F3 A3 C4 E4', 'F#2 C3 A3 C4 Eb4', 'Ab2 F3 B3 C4 D4', 'G2 F3 G3 B3 D4',
+    'G2 E3 G3 C4 E4', 'G2 D3 G3 C4 F4', 'G2 D3 G3 B3 F4', 'G2 Eb3 A3 C4 F#4',
+    'G2 E3 G3 C4 G4', 'G2 D3 G3 C4 F4', 'G2 D3 G3 B3 F4', 'C2 C3 G3 Bb3 E4'
+  ];
+  const CODA = [
+    'C2 C3 F3 A3 C4 F4 C4 A3 C4 A3 F3 A3 F3 D3 F3 D3',
+    'C2 B2 G4 B4 D5 F5 D5 B4 D5 B4 G4 B4 D4 F4 E4 D4'
+  ];
+  const CODA_PAD = ['C3 F3 A3 C4', 'C3 G3 B3 D4 F4'];
+  const FINAL = 'C2 C3 E4 G4 C5';
+  const TOTAL_BARS = BARS.length + CODA.length + 1;
+  const STEP = 60/70/4;                 // one semiquaver at crotchet = 70
+  const VOICE_GAIN = [1.1, 0.9, 0.82];
+
+  // How tense each bar's harmony is: semitones and tritones count most.
+  function tension(notes) {
+    const pcs = [...new Set(notes.map(m => m % 12))];
+    let s = 0;
+    for (let i = 0; i < pcs.length; i++) for (let j = i + 1; j < pcs.length; j++) {
+      const d = Math.abs(pcs[i] - pcs[j]), ic = Math.min(d, 12 - d);
+      s += ic === 1 ? 1 : ic === 6 ? 0.7 : ic === 2 ? 0.25 : 0;
+    }
+    return Math.min(1, s/2.4);
+  }
+  const EV = [], NOTES = [], BAR_MOOD = [];
+  let BACH_DUR = 0;
+  (() => {
+    const dyn = b => 0.5 + 0.16*Math.sin(Math.PI*b/TOTAL_BARS) + (b >= 24 && b <= 31 ? 0.1*(b - 24)/7 : 0) - (b >= 33 ? 0.08 : 0);
+    let t = 0;
+    BARS.forEach((line, bi) => {
+      const n = line.split(' ').map(midi), v = dyn(bi + 1);
+      BAR_MOOD.push(tension(n));
+      n.forEach(m => EV.push({ t, pad: true, midi: m, dur: 16*STEP, bar: bi + 1 }));
+      for (let half = 0; half < 2; half++) {
+        [0, 1, 2, 3, 4, 2, 3, 4].forEach((k, i) => {
+          const voice = i === 0 ? 0 : i === 1 ? 1 : 2;
+          const dur = voice === 0 ? STEP*8 + 1.0 : voice === 1 ? STEP*7 + 0.8 : 1.1;
+          EV.push({ t: t + i*STEP, midi: n[k], vel: v*VOICE_GAIN[voice], dur, voice, bar: bi + 1 });
+        });
+        t += 8*STEP;
+      }
+    });
+    CODA.forEach((line, ci) => {
+      const n = line.split(' ').map(midi), bar = BARS.length + ci + 1, v = dyn(bar), t0 = t;
+      BAR_MOOD.push(tension(n));
+      n.forEach((m, i) => {
+        const voice = i === 0 ? 0 : i === 1 ? 1 : 2;
+        const dur = voice === 0 ? STEP*18 + 1.5 : voice === 1 ? STEP*16 + 1.0 : 1.3;
+        EV.push({ t, midi: m, vel: v*VOICE_GAIN[voice], dur, voice, bar });
+        t += STEP*(ci === 0 ? 1 + 0.1*i/15 : 1.12 + 0.8*Math.pow(i/15, 2));   // ritardando
+      });
+      CODA_PAD[ci].split(' ').map(midi).forEach(m => EV.push({ t: t0, pad: true, midi: m, dur: t - t0, bar }));
+    });
+    t += 0.3;
+    const fin = FINAL.split(' ').map(midi);
+    BAR_MOOD.push(tension(fin));
+    fin.forEach((m, i) => {
+      EV.push({ t: t + i*0.075, midi: m, vel: 0.5*VOICE_GAIN[Math.min(i, 2)], dur: 6.5, voice: Math.min(i, 2), bar: TOTAL_BARS });
+    });
+    'C3 E3 G3 C4 E4'.split(' ').map(midi).forEach(m => EV.push({ t, pad: true, midi: m, dur: 4.5, bar: TOTAL_BARS }));
+    BACH_DUR = t + 8;
+    EV.forEach(e => { if (!e.pad) NOTES.push(e); });     // the notes in score order
+    EV.sort((a, b) => a.t - b.t);
+  })();
+
+  /* ------------------------------------------------------------------
+     The recording: Kimiko Ishizaka's Open Well-Tempered Clavier (2015),
+     which she released into the public domain. Each of the score's 545
+     note onsets was located in her performance, so the galaxy follows
+     her playing note for note, at her tempo and with her dynamics.
+  ------------------------------------------------------------------ */
+  const REC_T = [0.289,0.599,0.868,1.107,1.367,1.636,1.906,2.195,2.444,2.774,2.993,3.253,3.542,3.771,4.051,4.32,4.58,4.849,5.108,5.338,5.617,5.887,6.156,6.415,6.685,6.974,7.214,7.493,7.742,7.982,8.261,8.56,8.81,9.099,9.359,9.618,9.898,10.167,10.436,10.706,10.955,11.264,11.514,11.783,12.033,12.292,12.581,12.851,13.13,13.399,13.669,13.938,14.218,14.467,14.766,15.036,15.285,15.575,15.824,16.103,16.373,16.612,16.892,17.161,17.45,17.74,17.999,18.259,18.548,18.797,19.067,19.326,19.585,19.875,20.134,20.394,20.683,20.932,21.192,21.451,21.701,21.99,22.269,22.499,22.788,23.058,23.307,23.566,23.836,24.155,24.395,24.644,24.933,25.193,25.462,25.732,25.971,26.25,26.54,26.809,27.078,27.358,27.627,27.897,28.146,28.435,28.695,28.964,29.224,29.473,29.742,30.012,30.271,30.561,30.83,31.069,31.359,31.638,31.887,32.147,32.396,32.716,32.965,33.215,33.484,33.743,34.033,34.292,34.541,34.831,35.1,35.34,35.629,35.898,36.158,36.447,36.707,37.006,37.265,37.495,37.784,38.044,38.313,38.602,38.892,39.151,39.42,39.68,39.949,40.219,40.488,40.757,41.027,41.306,41.566,41.815,42.094,42.344,42.613,42.913,43.182,43.481,43.721,43.98,44.269,44.529,44.778,45.048,45.297,45.616,45.856,46.105,46.404,46.654,46.933,47.223,47.492,47.801,48.071,48.32,48.62,48.899,49.158,49.438,49.697,49.986,50.256,50.495,50.775,51.034,51.303,51.573,51.842,52.132,52.411,52.68,52.95,53.239,53.498,53.758,54.027,54.317,54.596,54.855,55.125,55.374,55.654,55.973,56.222,56.522,56.781,57.04,57.34,57.599,57.858,58.168,58.407,58.677,58.966,59.225,59.515,59.754,60.034,60.323,60.602,60.862,61.141,61.41,61.69,61.959,62.229,62.498,62.797,63.057,63.346,63.575,63.875,64.104,64.394,64.673,64.982,65.272,65.531,65.79,66.05,66.329,66.599,66.878,67.187,67.487,67.706,67.975,68.255,68.494,68.774,69.053,69.332,69.612,69.871,70.121,70.4,70.679,70.969,71.238,71.517,71.807,72.046,72.296,72.575,72.854,73.134,73.423,73.732,74.052,74.311,74.561,74.85,75.179,75.429,75.688,75.977,76.277,76.566,76.805,77.085,77.384,77.644,77.923,78.202,78.492,78.771,79.02,79.29,79.569,79.838,80.118,80.417,80.697,80.936,81.205,81.485,81.764,82.043,82.313,82.582,82.882,83.161,83.41,83.71,83.999,84.249,84.508,84.777,85.047,85.326,85.576,85.855,86.134,86.414,86.673,86.952,87.242,87.521,87.76,88.07,88.329,88.599,88.878,89.157,89.447,89.706,89.946,90.245,90.504,90.774,91.053,91.342,91.652,91.911,92.191,92.44,92.739,93.019,93.288,93.587,93.887,94.126,94.405,94.665,94.944,95.243,95.493,95.842,96.151,96.401,96.66,96.93,97.199,97.478,97.788,98.117,98.466,98.716,98.985,99.264,99.544,99.863,100.202,100.631,101.001,101.29,101.529,101.809,102.078,102.357,102.647,102.936,103.245,103.525,103.744,104.034,104.313,104.572,104.842,105.151,105.391,105.67,105.929,106.209,106.488,106.757,107.027,107.296,107.596,107.865,108.124,108.394,108.683,108.932,109.222,109.501,109.81,110.07,110.329,110.619,110.918,111.177,111.467,111.726,112.005,112.285,112.524,112.824,113.093,113.382,113.652,113.921,114.191,114.49,114.749,115.038,115.318,115.597,115.887,116.146,116.415,116.685,116.954,117.234,117.503,117.772,118.072,118.351,118.64,118.92,119.169,119.459,119.748,120.017,120.297,120.556,120.855,121.125,121.384,121.653,121.903,122.172,122.452,122.711,123.02,123.3,123.559,123.879,124.198,124.447,124.697,124.956,125.255,125.545,125.794,126.083,126.363,126.612,126.882,127.181,127.48,127.76,127.999,128.298,128.588,128.837,129.126,129.426,129.725,130.014,130.264,130.543,130.833,131.072,131.341,131.621,131.91,132.19,132.439,132.718,132.988,133.257,133.566,133.826,134.095,134.395,134.634,134.913,135.193,135.462,135.751,136.061,136.35,136.659,136.909,137.178,137.478,137.737,138.016,138.306,138.585,138.894,139.124,139.393,139.702,139.982,140.281,140.66,141.01,141.289,141.538,141.838,142.137,142.406,142.666,142.935,143.244,143.524,143.783,144.073,144.322,144.591,144.871,145.19,145.559,145.849,146.128,146.427,146.756,147.036,147.305,147.605,147.884,148.183,148.512,148.852,149.191,149.55,149.979,150.229];
+  const REC_V = [0.6,0.75,0.65,0.45,0.83,0.9,0.46,0.46,0.61,0.51,0.61,0.41,0.48,0.68,0.41,0.39,0.71,1.0,0.73,0.67,1.0,0.67,0.42,0.75,0.78,0.83,0.62,0.41,0.58,0.54,0.34,0.35,0.74,1.0,0.66,0.66,1.0,0.83,0.48,0.53,0.45,0.73,0.53,0.4,0.69,0.54,0.39,0.32,0.62,0.89,0.68,0.46,0.63,0.68,0.34,0.34,0.49,0.63,0.56,0.37,0.48,0.76,0.39,0.41,0.83,1.0,0.81,0.83,1.0,0.87,0.79,0.71,0.78,0.78,0.74,0.55,0.72,0.46,0.55,0.55,0.76,1.0,0.88,0.73,0.64,0.87,0.6,0.38,0.77,0.67,0.73,0.63,0.43,0.61,0.55,0.33,0.78,0.96,0.73,0.55,1.0,0.83,0.51,0.45,0.61,0.81,0.61,0.42,0.63,0.74,0.42,0.41,0.59,0.67,0.93,0.85,0.57,0.6,0.55,0.32,0.63,0.54,0.79,0.75,0.34,0.72,0.55,0.4,0.67,0.68,0.92,1.0,0.49,0.73,0.65,0.38,0.52,0.44,0.68,0.66,0.3,0.71,0.62,0.36,0.52,0.57,0.96,0.85,0.48,0.95,0.72,0.41,0.62,0.37,0.87,0.62,0.38,0.91,0.68,0.35,0.41,0.45,0.88,0.6,0.59,0.62,0.52,0.38,0.4,0.37,0.68,0.47,0.35,0.63,0.53,0.34,0.56,0.86,0.96,1.0,0.65,1.0,1.0,0.64,0.55,0.72,0.91,0.88,0.47,1.0,0.84,0.58,0.93,0.67,1.0,0.73,0.91,1.0,0.67,0.54,0.65,0.5,0.87,0.59,0.57,0.98,0.51,0.3,0.8,0.39,0.91,0.54,0.64,0.87,0.5,0.38,0.63,0.37,0.77,0.5,0.46,0.9,0.6,0.45,0.54,0.42,0.61,0.85,0.53,0.52,0.73,0.44,0.59,0.3,0.53,0.81,0.38,0.62,0.66,0.41,0.74,0.86,0.66,0.85,0.99,0.68,0.72,0.56,0.72,0.55,0.48,0.57,0.4,0.41,0.59,0.56,0.58,0.66,0.56,0.75,0.74,0.61,0.65,0.57,0.45,0.47,0.43,0.5,0.53,0.51,0.57,0.49,0.56,0.54,0.49,0.69,0.75,0.38,0.54,0.5,0.51,0.39,0.32,0.52,0.49,0.36,0.44,0.42,0.68,0.76,0.54,0.69,1.0,0.52,0.53,0.75,0.67,0.44,0.42,0.6,0.82,0.42,0.48,0.76,0.67,0.63,0.9,1.0,1.0,0.9,1.0,1.0,0.94,0.54,0.76,0.99,1.0,0.7,0.84,0.96,0.77,0.76,0.62,0.84,1.0,0.69,0.61,0.85,0.77,0.68,0.52,0.7,0.88,0.57,0.54,0.69,0.66,0.66,0.64,0.54,1.0,0.54,0.64,0.73,0.84,0.61,0.61,0.52,0.82,0.56,0.44,0.71,0.46,0.73,0.6,0.87,1.0,0.69,0.74,1.0,0.63,0.44,0.46,0.61,0.9,0.46,0.62,0.86,0.5,0.61,0.45,0.69,1.0,0.49,0.53,0.8,0.51,0.51,0.32,0.52,0.78,0.35,0.5,0.78,0.56,0.67,0.49,0.78,1.0,0.5,0.63,0.84,0.53,0.46,0.44,0.55,0.78,0.43,0.6,0.77,0.62,0.35,0.49,0.81,0.77,0.43,0.69,0.62,0.48,0.46,0.39,0.7,0.58,0.44,0.57,0.48,0.61,0.45,0.41,0.55,0.59,0.45,0.51,0.45,0.5,0.3,0.37,0.47,0.41,0.31,0.47,0.41,0.52,0.73,0.59,0.9,1.0,0.66,0.79,0.97,0.57,0.65,0.69,0.71,1.0,0.57,0.76,0.98,0.77,0.86,0.71,0.98,1.0,0.66,0.76,1.0,0.99,0.74,0.56,0.8,0.9,0.52,0.77,0.95,0.79,0.65,0.65,0.87,0.79,0.48,0.73,0.65,0.72,0.49,0.45,0.7,0.49,0.39,0.56,0.63,0.56,0.55,0.39,0.63,0.76,0.46,0.58,0.5,0.51,0.35,0.3,0.51,0.46,0.33,0.43,0.44,0.58,0.5,0.39,0.61,0.7,0.4,0.45,0.47,0.49,0.43,0.38,0.6,0.74,0.39,0.5,0.56,0.66,0.42,0.59,0.55,0.8,0.78,0.68,0.73,0.66,0.63,0.69,0.64,0.79,0.55,0.56,0.45,0.88,0.93,1.0,0.93,0.9,1.0,0.91,0.81,0.93,0.84,1.0,0.57,1.0,0.49,0.96,0.92,0.56];
+  const REC_META = 'J. S. Bach · BWV 846 · Kimiko Ishizaka, piano', SYNTH_META = 'J. S. Bach · BWV 846 · synthesised';
+  const REC = { url: 'prelude.mp3', buf: null, state: 'loading', want: false, ev: [], i: 0 };
+  NOTES.forEach((n, i) => {
+    const k = Math.min(i, REC_T.length - 1);          // the last five notes are the final chord, struck together
+    REC.ev.push({ t: REC_T[k], midi: n.midi, vel: REC_V[k], voice: n.voice, bar: n.bar });
+  });
+
+  /* ------------------------------------------------------------------
+     Audio
+  ------------------------------------------------------------------ */
+  let ctx = null, master, synthSum, fileGain, recGain, an, noteOut = null, fa;
+  const waves = {};
+  const vq = [];           // notes waiting to be shown at the moment they sound
+  // mode: 'rec' = the piano recording, 'bach' = the synthesised fallback, 'file' = the listener's own audio
+  const T = { mode: 'rec', playing: false, started: false, t0: 0, dur: 161.8, offset: 0, evIdx: 0, src: null, buffer: null };
+  let curBar = 1, resuming = false;
+
+  function ensureAudio() {
+    if (ctx) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    ctx = new AC({ latencyHint: 'interactive' });
+    master = ctx.createGain(); master.gain.value = 1;
+    an = ctx.createAnalyser(); an.fftSize = 2048; an.smoothingTimeConstant = 0.55;
+    an.minDecibels = -85; an.maxDecibels = -15;
+    fa = new Uint8Array(an.frequencyBinCount);
+    master.connect(an); an.connect(ctx.destination);
+    fileGain = ctx.createGain(); fileGain.connect(master);
+    recGain = ctx.createGain(); recGain.gain.value = 1.25; recGain.connect(master);
+
+    // Synth bus: gentle compression and a generated hall
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.ratio.value = 3; comp.attack.value = 0.01; comp.release.value = 0.25;
+    const boost = ctx.createGain(); boost.gain.value = 1.3;
+    comp.connect(boost); boost.connect(master);
+    synthSum = ctx.createGain(); synthSum.connect(comp);
+    const sr = ctx.sampleRate, len = Math.floor(sr*3.2), ir = ctx.createBuffer(2, len, sr);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch); let lp = 0;
+      for (let i = 0; i < len; i++) {
+        lp += ((Math.random()*2 - 1)*Math.pow(1 - i/len, 2.6) - lp)*0.35;
+        d[i] = lp;
+      }
+    }
+    const hall = ctx.createConvolver(); hall.buffer = ir;
+    const wet = ctx.createGain(); wet.gain.value = 0.36;
+    synthSum.connect(hall); hall.connect(wet); wet.connect(comp);
+
+    const wave = (falloff, n) => {
+      const re = new Float32Array(n + 1), im = new Float32Array(n + 1);
+      for (let k = 1; k <= n; k++) im[k] = 1/Math.pow(k, falloff);
+      return ctx.createPeriodicWave(re, im);
+    };
+    waves.low = wave(1.25, 14); waves.mid = wave(1.6, 10); waves.hi = wave(1.9, 8); waves.pad = wave(1.35, 12);
+
+    ctx.onstatechange = () => {
+      if (T.playing && ctx.state !== 'running' && !resuming) setPlaying(false);   // e.g. a phone call
+    };
+  }
+
+  function killSession() {
+    if (!noteOut) return;
+    const old = noteOut; noteOut = null;
+    try { old.gain.setTargetAtTime(0, ctx.currentTime, 0.03); } catch (e) {}
+    setTimeout(() => { try { old.disconnect(); } catch (e) {} }, 400);
+  }
+  function newSession() {
+    killSession();
+    noteOut = ctx.createGain(); noteOut.connect(synthSum);
+  }
+
+  const PAN = [-0.1, 0.18, 0.05];
+  function playNote(ev, when) {
+    const f = 440*Math.pow(2, (ev.midi - 69)/12);
+    const o = ctx.createOscillator();
+    o.setPeriodicWave(ev.midi < 48 ? waves.low : ev.midi < 60 ? waves.mid : waves.hi);
+    o.frequency.value = f;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.4;
+    lp.frequency.setValueAtTime(Math.min(9000, f*9 + 600), when);
+    lp.frequency.exponentialRampToValueAtTime(Math.min(5000, Math.max(750, f*2.6 + 250)), when + 0.45);
+    const g = ctx.createGain(), v = ev.vel*0.42;
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.exponentialRampToValueAtTime(v, when + 0.01);
+    g.gain.exponentialRampToValueAtTime(v*0.5, when + 0.16);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + ev.dur);
+    o.connect(lp); lp.connect(g);
+    if (ctx.createStereoPanner) {
+      const p = ctx.createStereoPanner();
+      p.pan.value = clamp(PAN[ev.voice] + (ev.midi - 60)*0.006, -0.6, 0.6);
+      g.connect(p); p.connect(noteOut);
+    } else g.connect(noteOut);
+    o.start(when); o.stop(when + ev.dur + 0.05);
+  }
+  // A quiet sustained string pad holding each bar's own five notes under the arpeggio.
+  function playPad(ev, when) {
+    const f = 440*Math.pow(2, (ev.midi - 69)/12), end = when + ev.dur;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.3;
+    lp.frequency.value = Math.min(2200, f*2.5 + 350);
+    const g = ctx.createGain(), v = 0.017;
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.linearRampToValueAtTime(v, when + 0.7);
+    g.gain.setValueAtTime(v, Math.max(when + 0.7, end));
+    g.gain.linearRampToValueAtTime(0.0001, Math.max(when + 0.7, end) + 1.3);
+    [-7, 6].forEach(det => {
+      const o = ctx.createOscillator();
+      o.setPeriodicWave(waves.pad); o.frequency.value = f; o.detune.value = det;
+      o.connect(lp); o.start(when); o.stop(Math.max(when + 0.7, end) + 1.4);
+    });
+    lp.connect(g); g.connect(noteOut);
+  }
+
+  // Look-ahead scheduler: notes are booked on the audio clock a little early,
+  // and the matching motion is queued for the instant the note is heard.
+  function pump() {
+    if (!ctx || T.mode !== 'bach' || !T.started || !noteOut) return;
+    const lim = ctx.currentTime + (document.hidden ? 2.5 : 0.4);
+    while (T.evIdx < EV.length) {
+      const ev = EV[T.evIdx], when = T.t0 + ev.t;
+      if (when > lim) break;
+      const at = Math.max(when, ctx.currentTime + 0.005);
+      if (ev.pad) playPad(ev, at);
+      else { playNote(ev, at); vq.push({ t: at, ev }); }
+      T.evIdx++;
+    }
+    if (T.evIdx >= EV.length && ctx.currentTime - T.t0 > T.dur) startAt(0);   // da capo
+  }
+  setInterval(pump, 60);
+
+  function stopSrc() {
+    if (!T.src) return;
+    const s = T.src; T.src = null;
+    try { s.stop(); } catch (e) {}
+    try { s.disconnect(); } catch (e) {}
+  }
+
+  function startAt(pos) {
+    pos = clamp(pos, 0, Math.max(0, T.dur - 0.05));
+    vq.length = 0;
+    if (T.mode === 'bach') {
+      newSession();
+      T.t0 = ctx.currentTime + 0.1 - pos;
+      let i = 0;
+      while (i < EV.length && EV[i].t < pos - 1e-4) i++;
+      T.evIdx = i;
+      if (i < EV.length) curBar = EV[i].bar;
+    } else {
+      stopSrc();
+      const rec = T.mode === 'rec';
+      const s = ctx.createBufferSource();
+      s.buffer = rec ? REC.buf : T.buffer; s.connect(rec ? recGain : fileGain);
+      s.onended = () => { if (T.src === s) fileEnded(); };
+      const at = ctx.currentTime + 0.06;
+      s.start(at, pos);
+      T.src = s; T.t0 = at - pos;
+      if (rec) {
+        let i = 0;
+        while (i < REC.ev.length && REC.ev[i].t < pos - 1e-4) i++;
+        REC.i = i;
+        if (i < REC.ev.length) curBar = REC.ev[i].bar;
+      }
+    }
+    T.started = true; T.offset = pos;
+  }
+
+  function fileEnded() {
+    T.src = null; T.started = false; T.offset = 0;
+    ctx.suspend();
+    setPlaying(false);
+    say('Finished. Press play to hear it again.');
+  }
+
+  const songPos = () => (T.started && ctx) ? clamp(ctx.currentTime - T.t0, 0, T.dur) : T.offset;
+
+  /* Recorded audio: three frequency bands stand in for the three voices.
+     A band's sudden rise counts as a note. */
+  const BANDS = [[30, 180], [180, 1500], [1500, 8000]].map((b, k) => ({ lo: b[0], hi: b[1], peak: 0.1, fast: 0, slow: 0, lastOn: -1, armed: true, thr: [0.10, 0.09, 0.08][k], gap: [0.20, 0.12, 0.09][k] }));
+  function analyse(dt, now) {
+    an.getByteFrequencyData(fa);
+    const hz = ctx.sampleRate/an.fftSize;
+    let total = 0;
+    BANDS.forEach((B, k) => {
+      const a = Math.max(1, Math.floor(B.lo/hz)), b = Math.min(fa.length - 1, Math.ceil(B.hi/hz));
+      let s = 0;
+      for (let i = a; i <= b; i++) s += fa[i];
+      const e = s/((b - a + 1)*255);
+      B.peak = Math.max(B.peak*Math.exp(-dt*0.06), e, 0.1);
+      const en = e/B.peak;
+      B.fast += (en - B.fast)*(1 - Math.exp(-dt/0.035));
+      B.slow += (en - B.slow)*(1 - Math.exp(-dt/0.3));
+      const nov = B.fast - B.slow;
+      if (nov > B.thr && B.armed && now - B.lastOn > B.gap) {
+        B.armed = false; B.lastOn = now;
+        M.flip = -M.flip;
+        hit(k, clamp(0.35 + nov*3, 0.35, 1.1), M.flip);
+      } else if (nov < B.thr*0.4) B.armed = true;
+      total += en*[0.45, 0.35, 0.2][k];
+    });
+    M.bass = Math.max(M.bass, BANDS[0].fast*BANDS[0].fast*1.1);
+    M.mid = Math.max(M.mid, BANDS[1].fast*BANDS[1].fast);
+    M.high = Math.max(M.high, BANDS[2].fast*BANDS[2].fast);
+    M.sB.v += (BANDS[0].fast - BANDS[0].slow)*40*dt;
+    M.bRaw = Math.max(M.bRaw, BANDS[0].fast*BANDS[0].fast*0.8);
+    M.eRaw = Math.max(M.eRaw, (BANDS[1].fast + BANDS[2].fast)*0.35);
+    M.levelT = clamp(total*1.25, 0, 1);
+    M.moodT = clamp(0.3 + 0.7*(BANDS[0].slow - BANDS[2].slow), 0, 1);
+  }
+
+  /* ------------------------------------------------------------------
+     Transport and controls
+  ------------------------------------------------------------------ */
+  const playBtn = $('play'), seek = $('seek'), barEl = $('bar'), clockEl = $('clock');
+  let wakeLock = null, heardHint = false, seeking = false, idleTimer = 0;
+
+  function wakeUI() {
+    document.body.classList.remove('idle');
+    clearTimeout(idleTimer);
+    if (T.playing) idleTimer = setTimeout(() => {
+      if (T.playing && !seeking) document.body.classList.add('idle');
+    }, 6000);
+  }
+  ['pointermove', 'pointerdown', 'keydown', 'focusin'].forEach(n => window.addEventListener(n, wakeUI, { passive: true }));
+
+  async function wake(on) {
+    try {
+      if (on && navigator.wakeLock && !wakeLock) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+    } catch (e) {}
+  }
+
+  function setPlaying(on) {
+    T.playing = on;
+    $('ico-play').hidden = on; $('ico-pause').hidden = !on;
+    playBtn.setAttribute('aria-label', on ? 'Pause' : 'Play');
+    wake(on);
+    wakeUI();
+  }
+
+  function toggle() {
+    ensureAudio();
+    if (T.playing) { ctx.suspend(); setPlaying(false); REC.want = false; return; }
+    resuming = true;
+    const p = ctx.resume();
+    const waiting = T.mode === 'rec' && REC.state === 'loading';
+    if (waiting) REC.want = true;
+    else if (!T.started) startAt(T.offset);
+    setPlaying(true);
+    if (waiting) say('Loading the piano recording…');
+    else if (!heardHint) {
+      heardHint = true;
+      say('No sound? Check the volume and your phone’s silent switch.', HINT, 7000);
+    } else say(HINT);
+    Promise.resolve(p).then(() => { resuming = false; }, () => {
+      resuming = false; setPlaying(false);
+      say('The browser blocked the audio. Press play again.');
+    });
+  }
+  playBtn.addEventListener('click', toggle);
+  window.addEventListener('keydown', e => {
+    if (e.code !== 'Space') return;
+    const tag = (e.target && e.target.tagName) || '';
+    if (/^(BUTTON|INPUT|LABEL|A)$/.test(tag)) return;
+    e.preventDefault(); toggle();
+  });
+
+  const fmt = s => { s = Math.max(0, Math.floor(s)); return Math.floor(s/60) + ':' + String(s % 60).padStart(2, '0'); };
+
+  seek.addEventListener('input', () => {
+    seeking = true;
+    const frac = seek.value/1000;
+    seek.style.setProperty('--p', (frac*100).toFixed(1) + '%');
+    clockEl.textContent = fmt(frac*T.dur) + ' / ' + fmt(T.dur);
+  });
+  seek.addEventListener('change', () => {
+    const pos = seek.value/1000*T.dur;
+    seeking = false;
+    if (ctx && T.started) startAt(pos); else T.offset = pos;
+  });
+
+  function setPiece(title, meta) {
+    $('piece-meta').textContent = title + ' · ' + meta;
+    const own = T.mode === 'file';
+    $('back-bach').hidden = !own;
+    if (own) barEl.textContent = 'Bass, middle and treble bands';
+    resize();
+  }
+
+  function readFile(file) {
+    if (file.arrayBuffer) return file.arrayBuffer();
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result); r.onerror = () => rej(r.error);
+      r.readAsArrayBuffer(file);
+    });
+  }
+  const decode = ab => new Promise((res, rej) => {
+    const p = ctx.decodeAudioData(ab, res, rej);
+    if (p && p.catch) p.catch(rej);
+  });
+
+  async function loadFile(file) {
+    if (!file) return;
+    const isAudio = /^audio\//.test(file.type) || /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|aiff?)$/i.test(file.name);
+    if (!isAudio) { say('That file is not audio. Choose an MP3, M4A, WAV or FLAC.'); return; }
+    if (file.size > 80e6) { say('That file is over 80 MB, which is too large to decode here. Try a shorter track.'); return; }
+    ensureAudio();
+    say('Decoding ' + file.name + '…');
+    let buf;
+    try { buf = await decode(await readFile(file)); }
+    catch (e) { say('That file could not be decoded. Try an MP3, M4A or WAV.'); return; }
+    stopSrc(); killSession(); REC.want = false;
+    T.mode = 'file'; T.buffer = buf; T.dur = buf.duration; T.started = false; T.offset = 0;
+    BANDS.forEach(B => { B.peak = 0.1; B.fast = B.slow = 0; });
+    setPiece(file.name.replace(/\.[^.]+$/, '').replace(/_+/g, ' '), 'Your recording · ' + fmt(buf.duration));
+    if (T.playing && ctx.state === 'running') {
+      startAt(0);
+      say('Now the recording’s bass, middle and treble move the galaxy.', HINT, 7000);
+    } else {
+      setPlaying(false);
+      say('Loaded. Press play. The recording’s bass, middle and treble will move the galaxy.');
+    }
+  }
+  $('file-input').addEventListener('change', e => { loadFile(e.target.files[0]); e.target.value = ''; });
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', e => {
+    e.preventDefault();
+    if (e.dataTransfer && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+  });
+
+  $('back-bach').addEventListener('click', () => {
+    stopSrc();
+    T.buffer = null; T.started = false; T.offset = 0; curBar = 1;
+    if (REC.state === 'ready') { T.mode = 'rec'; T.dur = REC.buf.duration; setPiece('Prelude in C major', REC_META); }
+    else { T.mode = 'bach'; T.dur = BACH_DUR; setPiece('Prelude in C major', SYNTH_META); }
+    if (T.playing && ctx && ctx.state === 'running') startAt(0);
+    say(HINT);
+  });
+
+  const fsBtn = $('fs'), rootEl = document.documentElement;
+  const fsOn = () => document.fullscreenElement || document.webkitFullscreenElement;
+  if (!(document.fullscreenEnabled || document.webkitFullscreenEnabled)) fsBtn.hidden = true;
+  fsBtn.addEventListener('click', () => {
+    const no = () => say('Full screen is not available in this view.', HINT, 5000);
+    try {
+      if (fsOn()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      else {
+        const p = (rootEl.requestFullscreen || rootEl.webkitRequestFullscreen).call(rootEl);
+        if (p && p.catch) p.catch(no);
+      }
+    } catch (e) { no(); }
+  });
+  const fsLabel = () => { fsBtn.textContent = fsOn() ? 'Exit full screen' : 'Full screen'; };
+  document.addEventListener('fullscreenchange', fsLabel);
+  document.addEventListener('webkitfullscreenchange', fsLabel);
+
+  /* ------------------------------------------------------------------
+     Camera
+  ------------------------------------------------------------------ */
+  const cam = { yaw: 0.9, el: 0.62, zoom: 1, roll: 0.2, dist: 0, drag: false };
+  const pts = new Map();
+  let pinch0 = 0, zoom0 = 1;
+  const pinchDist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  canvas.addEventListener('pointerdown', e => {
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    cam.drag = true; canvas.classList.add('dragging');
+    if (pts.size === 2) { pinch0 = pinchDist(); zoom0 = cam.zoom; }
+  });
+  canvas.addEventListener('pointermove', e => {
+    const p = pts.get(e.pointerId);
+    if (!p) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    if (pts.size === 1) {
+      cam.yaw -= dx*0.006;
+      cam.el = clamp(cam.el + dy*0.005, -1.35, 1.35);
+    } else if (pts.size === 2 && pinch0 > 0) {
+      cam.zoom = clamp(zoom0*pinch0/Math.max(1, pinchDist()), 0.45, 1.9);
+    }
+  });
+  const release = e => {
+    pts.delete(e.pointerId);
+    pinch0 = 0;
+    if (pts.size === 0) { cam.drag = false; canvas.classList.remove('dragging'); }
+  };
+  canvas.addEventListener('pointerup', release);
+  canvas.addEventListener('pointercancel', release);
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    cam.zoom = clamp(cam.zoom*Math.exp(e.deltaY*0.001), 0.45, 1.9);
+  }, { passive: false });
+
+  /* ------------------------------------------------------------------
+     Choosing a galaxy
+  ------------------------------------------------------------------ */
+  let GAL = null, live = [], sized = false;
+  const extras = new THREE.Group();        // streams beside the galaxies on stage
+  galScene.add(extras);
+  const tagBox = $('tags'), tagEls = [];
+  const strip = $('galaxies');
+  const chips = ORDER.map(key => {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.type = 'button'; b.dataset.galaxy = key;
+    b.textContent = GALAXIES[key].chip;
+    b.setAttribute('aria-pressed', 'false');
+    strip.appendChild(b);
+    return b;
+  });
+  function setGalaxy(key) {
+    const G = GALAXIES[key];
+    if (!G || G === GAL) return;
+    GAL = G; G.key = key;
+    const isWeb = G.kind === 'web';
+    while (extras.children.length) { const c = extras.children[extras.children.length - 1]; extras.remove(c); c.geometry.dispose(); }
+    SLOTS.forEach(s => { s.group.visible = false; });
+    live = [];
+    if (isWeb) {
+      if (!web) web = buildLaniakea();
+    } else {
+      G.parts.forEach((p, i) => {
+        const s = SLOTS[i] || (SLOTS[i] = makeSlot(i));
+        if (!p.mat) {
+          const v4 = a => ({ value: new THREE.Vector4().fromArray(a) });
+          p.mat = new THREE.ShaderMaterial(Object.assign({
+            uniforms: { uSeed: v4(p.seed), uArm: v4(p.arm), uArm2: v4(p.arm2), uBar: v4(p.bar), uRing1: v4(p.ring1), uRing2: v4(p.ring2), uDsk: v4(p.dsk), uAmt: v4(p.amt) },
+            vertexShader: FS_VERT, fragmentShader: p.frag
+          }, plain));
+        }
+        bakeInto(p.mat, s.map, 8);
+        blit(p.mat, smallRT);
+        renderer.readRenderTargetPixels(smallRT, 0, 0, SM, SM, mapPx);
+        buildStars(p, s);
+        s.part = p;
+        s.group.position.fromArray(p.pos);
+        s.group.rotation.set(p.rot[0], p.rot[1], p.rot[2]);
+        s.group.scale.setScalar(p.scale);
+        s.u.uDustK.value = p.dustK; s.u.uDustH.value = p.dustH; s.u.uScale.value = p.scale;
+        s.group.visible = true;
+        live.push(s);
+      });
+      if (G.streams) buildStreams(G.streams, extras);
+    }
+    extras.visible = !isWeb;
+    if (web) web.visible = isWeb;
+    // labels for companions and members
+    tagBox.textContent = ''; tagEls.length = 0;
+    (G.tags || []).forEach(t => {
+      const el = document.createElement('span');
+      el.className = 'tag'; el.textContent = t.t;
+      tagBox.appendChild(el);
+      tagEls.push({ el, p: new THREE.Vector3().fromArray(t.p) });
+    });
+    tagBox.hidden = !tagEls.length;
+    $('galaxy-name').textContent = G.name;
+    $('galaxy-sub').textContent = G.sub;
+    cam.el = G.el; cam.zoom = 1; cam.dist = 0;          // each one opens from its best-known angle
+    chips.forEach(b => {
+      const on = b.dataset.galaxy === key;
+      b.setAttribute('aria-pressed', String(on));
+      if (on) strip.scrollLeft = b.offsetLeft - strip.offsetLeft - (strip.clientWidth - b.offsetWidth)/2;
+    });
+    if (sized) resize();
+  }
+  function choose(key) {
+    if (GALAXIES[key] === GAL) return;
+    setGalaxy(key);
+    say(GAL.blurb, T.playing ? HINT : undefined, 9000);
+  }
+  chips.forEach(b => b.addEventListener('click', () => choose(b.dataset.galaxy)));
+  const step = d => choose(ORDER[(ORDER.indexOf(GAL.key) + d + ORDER.length) % ORDER.length]);
+  $('prev').addEventListener('click', () => step(-1));
+  $('next').addEventListener('click', () => step(1));
+  window.addEventListener('keydown', e => {
+    if (e.code !== 'ArrowLeft' && e.code !== 'ArrowRight') return;
+    if (e.target && e.target.tagName === 'INPUT') return;
+    step(e.code === 'ArrowLeft' ? -1 : 1);
+  });
+  setGalaxy('spiral');
+
+  /* ------------------------------------------------------------------
+     Sizing
+  ------------------------------------------------------------------ */
+  let W = 1, H = 1, bw = 1, bh = 1, vh = 1, aspect = 1, availFrac = 0.8;
+  const tanHalf = Math.tan(camera.fov*Math.PI/360);
+  const v2 = new THREE.Vector2(), bsize = [];
+  function resize() {
+    W = Math.max(1, window.innerWidth); H = Math.max(1, window.innerHeight);
+    let pr = Math.min(window.devicePixelRatio || 1, 3);
+    pr = Math.max(0.5, Math.min(pr, Math.sqrt(Q.maxMain*Q.scale/(W*H))));
+    renderer.setPixelRatio(pr);
+    renderer.setSize(W, H, false);
+    renderer.getDrawingBufferSize(v2);
+    bw = v2.x; bh = v2.y;
+    sceneRT.setSize(bw, bh);
+    const vs = Math.min(1, Math.sqrt(Q.maxVol*Q.volK/(bw*bh)));
+    const vw = Math.max(2, Math.round(bw*vs));
+    vh = Math.max(2, Math.round(bh*vs));
+    volRT.setSize(vw, vh);
+    let w = bw, h = bh;
+    for (let i = 0; i < BL; i++) {
+      w = Math.max(2, w >> 1); h = Math.max(2, h >> 1);
+      down[i].setSize(w, h); up[i].setSize(w, h);
+      bsize[i] = [w, h];
+    }
+    aspect = W/H;
+    camera.aspect = aspect;
+    const top = Math.max(0, $('programme').getBoundingClientRect().bottom);
+    const bot = Math.max(0, H - $('dock-in').getBoundingClientRect().top);
+    availFrac = clamp((H - top*0.5 - bot*0.5)/H, 0.5, 1);
+    camera.setViewOffset(W, H, 0, Math.round((bot - top)*0.3), W, H);
+    cam.roll = 0;                      // the disk's long axis stays level on every screen
+    volMat.uniforms.uPix.value = 2*tanHalf/vh;
+    volMat.uniforms.uSteps.value = Q.steps;
+    U.uPixel.value = bh/(2*tanHalf);
+    U.uMinPx.value = Math.max(1.45, 0.9*pr);
+    webMat.uniforms.uPixel.value = bh/(2*tanHalf);
+    webMat.uniforms.uMinPx.value = Math.max(1.8, 1.1*pr);
+    webLineMat.uniforms.uDpr.value = Math.max(1, pr);
+    fieldMat.uniforms.uDpr.value = Math.max(1, pr);
+    finalMat.uniforms.uAspect.value = aspect;
+  }
+  function fitDist(el) {
+    const f = GAL.fit || 1;                              // pairs and their tails need a wider frame
+    const se = Math.max(Math.abs(Math.sin(el))*f, GAL.minH), cr = Math.cos(cam.roll), sr = Math.sin(cam.roll);
+    const hw = Math.hypot(cr*f, sr*se), hh = Math.hypot(sr*f, cr*se);
+    return Math.max(hw/(tanHalf*aspect), hh/(tanHalf*availFrac))*(0.84 + 0.10*sstep(0.62, 1.3, aspect));
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  sized = true;
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(resize);
+
+  /* ------------------------------------------------------------------
+     Frame loop
+  ------------------------------------------------------------------ */
+  const v3 = new THREE.Vector3();
+  function placeTag(el, p) {
+    v3.copy(p).applyQuaternion(tiltQ).project(camera);
+    el.style.transform = 'translate(' + ((v3.x*0.5 + 0.5)*W + 9).toFixed(1) + 'px,' + ((-v3.y*0.5 + 0.5)*H).toFixed(1) + 'px) translateY(-50%)';
+  }
+  let last = performance.now()/1000, born = last, uiAt = 0, fAcc = 0, fN = 0, frameNo = 0, spin = 0.6, p1 = 0.6, p2 = 0.6, shearT = 0.5, bobT = 0, flowT = 0;
+  function frame(ms) {
+    const now = ms/1000, raw = now - last, dt = Math.min(0.05, Math.max(0, raw));
+    last = now;
+    frameNo++;
+
+    // Ease the resolution down if the device is struggling
+    if (Q.adaptive && raw < 1 && now - born > 2 && !document.hidden) {
+      fAcc += raw; fN++;
+      if (fN >= 50 || fAcc > 2.5) {
+        const avg = fAcc/fN;
+        if (avg > 0.021 && Q.drops < 8) {
+          Q.noGain = Q.lastAvg && avg > Q.lastAvg*0.93 ? Q.noGain + 1 : 0;
+          if (Q.noGain >= 2) {
+            // Lower quality bought no speed: the browser is capping the frame rate, so put it back.
+            Object.assign(Q, Q.undo[Q.undo.length - 2]);
+            Q.adaptive = false;
+          } else {
+            Q.undo.push({ volK: Q.volK, steps: Q.steps, scale: Q.scale });
+            Q.lastAvg = avg; Q.drops++;
+            if (Q.volK > 0.5) Q.volK *= 0.72; else if (Q.steps > 18) Q.steps -= 6; else Q.scale *= 0.78;
+          }
+          resize();
+        }
+        fAcc = 0; fN = 0;
+      }
+    }
+
+    // Music in
+    pump();
+    if (ctx && T.playing && T.started) {
+      if (T.mode === 'bach') {
+        const heard = ctx.currentTime - Math.min(0.3, ctx.outputLatency || ctx.baseLatency || 0);
+        while (vq.length && vq[0].t <= heard) {
+          const ev = vq.shift().ev;
+          hit(ev.voice, ev.vel, ev.midi >= M.last ? 1 : -1);
+          M.last = ev.midi;
+          M.act += 0.14*ev.vel;
+          M.moodT = BAR_MOOD[ev.bar - 1];
+          curBar = ev.bar;
+        }
+        M.levelT = clamp((M.act - 0.25)*2.6, 0, 1);
+      } else if (T.mode === 'rec') {
+        const heard = ctx.currentTime - T.t0 - Math.min(0.3, ctx.outputLatency || ctx.baseLatency || 0);
+        while (REC.i < REC.ev.length && REC.ev[REC.i].t <= heard) {
+          const ev = REC.ev[REC.i++];
+          hit(ev.voice, ev.vel, ev.midi >= M.last ? 1 : -1);
+          M.last = ev.midi;
+          M.act += 0.14*ev.vel;
+          M.moodT = BAR_MOOD[ev.bar - 1];
+          curBar = ev.bar;
+        }
+        M.levelT = clamp((M.act - 0.25)*2.6, 0, 1);
+      } else analyse(dt, now);
+    } else { M.levelT = 0; M.moodT = 0.25; }
+    hAcc += Math.min(Math.max(0, raw), 0.5);
+    while (hAcc >= hStep) { hAcc -= hStep; tick(); }
+    M.level += (M.levelT - M.level)*(1 - Math.exp(-dt/0.5));
+    M.slow += (M.level - M.slow)*(1 - Math.exp(-dt/4));
+    M.mood += (M.moodT - M.mood)*(1 - Math.exp(-dt/1.2));
+
+    // Galaxy state. The arm pattern turns at one rate while stars and gas orbit through it,
+    // faster than the arms near the centre and slower at the rim. The music sets the pace of it all.
+    const k = calm ? 0.35 : 1;
+    const om = 0.02 + k*(0.09*M.level + 0.22*M.bS + 0.09*M.eS);
+    spin -= dt*om;
+    p1 += (spin - p1)*(1 - Math.exp(-dt/0.55));          // the rim answers a surge later than the centre
+    p2 += (p1 - p2)*(1 - Math.exp(-dt/0.75));
+    if (spin < -50) { spin += 8*TAU; p1 += 8*TAU; p2 += 8*TAU; }
+    shearT += dt*(0.03 + 1.6*om);
+    U.uShear.value.x = opts.shear === undefined ? shearT % 1 : opts.shear;
+    U.uDiff.value = U.uShear.value.y*shearT;
+    bobT += dt*(0.25 + 2.4*om);
+    U.uBob.value = bobT;
+    flowT += dt*(0.2 + k*(0.8*M.level + 0.4*M.bS));
+    U.uFlow.value.set(flowT*0.61, flowT*0.47 + 1.3, flowT*0.83 + 2.1, flowT*0.71 + 4.0);
+    U.uFlowA.value = 0.004 + k*(0.006*M.level + 0.008*M.bS);
+    U.uBreath.value = 1 + k*(0.008*M.bS + 0.014*M.sB.x);
+    U.uPulse.value = k*clamp(0.6*M.bS + 0.3*M.eS, 0, 1);   // bursts of new stars with the notes
+    U.uWebT.value += dt*(0.006 + 0.08*om);                 // in the supercluster, the music sets how fast galaxies stream
+    // the rim carries the galaxy's frame; the centre leans ahead of it, bending the disk softly
+    const ox = clamp(k*M.ox, -0.5, 0.5), oz = clamp(k*M.oz, -0.5, 0.5);
+    tiltE.set(ox, 0, oz);
+    tiltQ.setFromEuler(tiltE);
+    tiltQi.copy(tiltQ).conjugate();
+    galScene.quaternion.copy(tiltQ);
+    U.uWarp.value.set(clamp(k*M.tx.x, -0.5, 0.5) - ox, clamp(k*M.tz.x, -0.5, 0.5) - oz);
+    volMat.uniforms.uH.value = 0.072 + 0.25*U.uWarp.value.length();
+    U.uTime.value = now % 3600;
+    U.uSpark.value = 0.22 + 0.9*M.high;
+    volMat.uniforms.uCore.value = 1.3*M.bS;
+    volMat.uniforms.uMood.value = M.mood;
+    volMat.uniforms.uFrame.value = frameNo % 64;
+    
+
+    // Camera: a slow orbit that rises and falls, leaning in as the music grows
+    if (!cam.drag && !calm) cam.yaw += dt*(T.playing ? 0.032 : 0.012);
+    const el = clamp(cam.el + (calm ? 0 : GAL.sway*Math.sin(now*0.07 + 0.6)), -1.4, 1.4);
+    const want = fitDist(el);
+    cam.dist = cam.dist ? cam.dist + (want - cam.dist)*(1 - Math.exp(-dt*3)) : want;
+    const d = Math.max(1.3, cam.dist*cam.zoom*(1 - k*(0.05*M.level + 0.015*M.bS)));
+    camera.position.set(Math.sin(cam.yaw)*Math.cos(el)*d, Math.sin(el)*d, Math.cos(cam.yaw)*Math.cos(el)*d);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(0, 0, 0);
+    camera.rotateZ(cam.roll);
+    camera.updateMatrixWorld();
+    fieldPts.position.copy(camera.position);
+    // Hand each galaxy on stage the camera as seen from its own frame.
+    const isWeb = GAL.kind === 'web';
+    if (isWeb) {
+      U.uCam.value.copy(camera.position).applyQuaternion(tiltQi);
+      camG.multiplyMatrices(m4.makeRotationFromQuaternion(tiltQi), camera.matrixWorld);
+      skyRot.setFromMatrix4(m4.makeRotationFromQuaternion(tiltQ));
+    } else {
+      live.forEach(s => {
+        const p = s.part;
+        qA.copy(tiltQ).multiply(s.group.quaternion);
+        qAi.copy(qA).conjugate();
+        v3.copy(s.group.position).applyQuaternion(tiltQ);
+        s.dist = camera.position.distanceTo(v3);
+        s.u.uCam.value.copy(camera.position).sub(v3).applyQuaternion(qAi).divideScalar(p.scale);
+        s.camW.multiplyMatrices(m4.makeRotationFromQuaternion(qAi), camera.matrixWorld);
+        s.sky.setFromMatrix4(m4.makeRotationFromQuaternion(qA));
+        s.u.uP.value.set(spin*p.spinK + p.phase, p1*p.spinK + p.phase, p2*p.spinK + p.phase);
+      });
+      U.uCam.value.copy(live[0].u.uCam.value);
+    }
+    tagEls.forEach(t => placeTag(t.el, t.p));
+    // seen nearly edge-on the disk piles up along the line of sight, so ease the exposure down
+    const sinInc = Math.abs(U.uCam.value.y)/Math.max(0.01, U.uCam.value.length());
+    finalMat.uniforms.uExposure.value = (1 + 0.07*M.bS)*(1 - 0.1*M.mood)*(0.66 + 0.34*sstep(0.12, 0.62, sinInc))/GAIN;
+
+    // Draw. With two galaxies the farther goes down first, so the nearer one's dust falls across it.
+    if (isWeb) {
+      setVol(GAL, U.uCam.value, camG, skyRot, null, true);
+      blit(volMat, volRT);
+      renderer.setRenderTarget(sceneRT);
+      renderer.clear();
+      renderer.render(bgScene, camera);
+      blit(compMat, sceneRT);
+      renderer.setRenderTarget(sceneRT);
+      renderer.render(galScene, camera);
+    } else {
+      if (live.length > 1) live.sort((a, b) => b.dist - a.dist);
+      live.forEach((s, i) => {
+        setVol(s.part, s.u.uCam.value, s.camW, s.sky, s, i === 0);
+        blit(volMat, volRT);
+        if (i === 0) {
+          renderer.setRenderTarget(sceneRT);
+          renderer.clear();
+          renderer.render(bgScene, camera);
+        }
+        blit(compMat, sceneRT);
+        live.forEach(o => { o.group.visible = o === s; });
+        extras.visible = i === live.length - 1;
+        renderer.setRenderTarget(sceneRT);
+        renderer.render(galScene, camera);
+      });
+    }
+
+    downMat[0].uniforms.tSrc.value = sceneRT.texture;
+    downMat[0].uniforms.uTexel.value.set(1/bw, 1/bh);
+    blit(downMat[0], down[0]);
+    for (let i = 1; i < BL; i++) {
+      downMat[i].uniforms.tSrc.value = down[i - 1].texture;
+      downMat[i].uniforms.uTexel.value.set(1/bsize[i - 1][0], 1/bsize[i - 1][1]);
+      blit(downMat[i], down[i]);
+    }
+    let src = down[BL - 1], ss = bsize[BL - 1];
+    for (let i = BL - 2; i >= 0; i--) {
+      upMat[i].uniforms.tSrc.value = src.texture;
+      upMat[i].uniforms.tAdd.value = down[i].texture;
+      upMat[i].uniforms.uTexel.value.set(1/ss[0], 1/ss[1]);
+      blit(upMat[i], up[i]);
+      src = up[i]; ss = bsize[i];
+    }
+    blit(finalMat, null);
+
+    // Readouts, ten times a second
+    if (now - uiAt > 0.1) {
+      uiAt = now;
+      if (!seeking) {
+        const pos = songPos(), frac = T.dur ? pos/T.dur : 0;
+        seek.value = Math.round(frac*1000);
+        seek.style.setProperty('--p', (frac*100).toFixed(1) + '%');
+        clockEl.textContent = fmt(pos) + ' / ' + fmt(T.dur);
+      }
+      if (T.mode !== 'file') {
+        const text = 'Bar ' + curBar + ' of ' + TOTAL_BARS;
+        if (barEl.textContent !== text) barEl.textContent = text;
+      }
+    }
+
+    requestAnimationFrame(frame);
+  }
+  // Fetch and decode the recording straight away, so it is ready by the time play is pressed.
+  (async () => {
+    try {
+      const r = await fetch(REC.url);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const ab = await r.arrayBuffer();
+      const OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      const oc = new OC(2, 1, 44100);
+      REC.buf = await new Promise((res, rej) => { const q = oc.decodeAudioData(ab, res, rej); if (q && q.catch) q.catch(rej); });
+      REC.state = 'ready';
+      if (T.mode === 'rec') T.dur = REC.buf.duration;
+    } catch (e) {
+      REC.state = 'failed';
+      if (T.mode === 'rec') {
+        T.mode = 'bach'; T.dur = BACH_DUR; T.started = false; T.offset = 0;
+        setPiece('Prelude in C major', SYNTH_META);
+        say('The piano recording could not be loaded, so this is a synthesised version of the same prelude.');
+      }
+    }
+    if (REC.want) {
+      REC.want = false;
+      if (T.playing && !T.started && T.mode !== 'file') {
+        startAt(T.offset);
+        if (REC.state === 'ready') say('No sound? Check the volume and your phone’s silent switch.', HINT, 7000);
+      }
+    }
+  })();
+
+  if (window.__muOpts) window.__mu = { REC, setGalaxy, M, cam, Q, T, hit, get an() { return an; } };
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
