@@ -2,11 +2,11 @@
 
 Beautiful galaxies dancing at the beat of music.
 
-**Musica Universalis** draws galaxies in 3D in your browser and moves them with the music. Two recordings come with it: Bach's Prelude in C major (BWV 846), which is calm water, and the storm that ends Vivaldi's *Summer*. You can also load a recording of your own.
+**Musica Universalis** draws galaxies, and a black hole, in 3D in your browser and moves them with the music. Two recordings come with it: Bach's Prelude in C major (BWV 846), which is calm water, and the storm that ends Vivaldi's *Summer*. You can also load a recording of your own.
 
 ## What's in it
 
-Thirteen views, chosen from the strip above the play button:
+Fourteen views, chosen from the strip above the play button:
 
 - Grand-design spiral (an imagined galaxy)
 - Andromeda Galaxy (M31), with M32 and M110
@@ -18,8 +18,11 @@ Thirteen views, chosen from the strip above the play button:
 - Antennae Galaxies (NGC 4038 and NGC 4039)
 - NGC 2207 and IC 2163
 - Laniakea, our home supercluster
+- A black hole and its disk of gas (an imagined one)
 
 Each galaxy is a likeness built from its known structure (bar, rings, arms, dust, tilt), not a copy of a photograph. Laniakea is a schematic, not a survey map.
+
+**The black hole.** Gravity bends light near a black hole, so each pixel's line of sight is traced along the curved path light takes there. That is why the far side of the disk appears lifted over the top and folded underneath, with a thin ring of light at the edge of the shadow, and why stars behind it slide round it as the camera orbits. The gas coming towards you is brighter and whiter than the gas going away. It departs from a real one in three ways: the hole does not spin, that brightness contrast is softened so the dim side stays visible, and the stars use a simpler bending rule than the disk does. With the music, the gas orbits faster, the inner edge flares with the bass, and the disk tilts, which reshapes the whole bent image.
 
 **How the music moves them.** The arm pattern turns at one rate while stars and gas orbit through it, faster near the centre, as in a real disk. The music sets the pace.
 
